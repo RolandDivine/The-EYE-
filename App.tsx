@@ -1,528 +1,667 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  ShieldAlert, Activity, Zap, Globe, Search, Cpu, RefreshCw, Target, 
-  AlertCircle, TrendingUp, Map as MapIcon, Share2, Box, BarChart3, 
-  Waves, Filter, Wallet, ArrowUpRight, ArrowDownRight, Menu, X, Rocket,
-  Link as LinkIcon, Gauge, Layers, Info, ShieldCheck, EyeOff, WifiOff, Wifi, 
-  ShoppingCart, Shield, ChevronRight, Binary
+  ShieldAlert, Activity, Zap, Search, Cpu, RefreshCw, 
+  TrendingUp, Map as MapIcon, Share2, BarChart3, 
+  Waves, Briefcase, User, Info, AlertCircle, ShoppingCart, 
+  Binary, Grid, Layers, Rocket, Target, ChevronRight, X,
+  Network, ArrowRightLeft, MousePointer2, Globe, Database, ListFilter,
+  ArrowUpRight, ArrowDownRight, Eye, Hash, Server, Clock, ShieldCheck,
+  Languages, Lock, Key, CheckCircle
 } from 'lucide-react';
-import { ViewState, TokenData, Technicals } from './types';
-import { generateMempoolData, generateTopographyData, generateWalletGraph, generateMetricChartData, generateTechnicalData } from './utils/math';
+import { ViewState, UserMode, TokenData, IntelligenceMetric, EntityTransfer, Language } from './types';
+import { translations } from './translations';
+import { generateMempoolData, generateWalletGraph, generateTechnicalData } from './utils/math';
 import { getMEVAnalysis } from './services/geminiService';
-import { fetchTokenByAddress, EnhancedTokenData } from './services/coingeckoService';
+import { fetchTokenByAddress, fetchTopMarkets, EnhancedTokenData } from './services/coingeckoService';
 import ProfitSimulator from './components/ProfitSimulator';
 import RetinaDisplay from './components/RetinaDisplay';
 import WalletGraph from './components/WalletGraph';
+import LiquidityHeatmap from './components/LiquidityHeatmap';
+import ExecutionModal from './components/ExecutionModal';
+
+const INSTITUTIONS = [
+  'Wintermute', 'Jump Crypto', 'Amber Group', 'Cumberland', 
+  'FalconX', 'Genesis Trading', 'Galaxy Digital', 'Paradigm', 
+  'Dragonfly Capital', 'Flow Traders'
+];
+
+const TRANSFER_TYPES = [
+  'Liquidity Injection', 'Treasury Rebalance', 'OTC Settlement', 
+  'LP Extraction', 'Staking Deposit', 'Governance Voting'
+];
+
+const RETAIL_ALPHA_SOURCES = [
+  'X (Twitter) Trending', 'Telegram Whale Pulse', 'DexTools Hot #1', 
+  'Sentiment Spike', 'New LP Added', 'Social Volume Hub'
+];
 
 const App: React.FC = () => {
-  const [activeView, setActiveView] = useState<ViewState>(ViewState.MEMPOOL);
-  const [strategy, setStrategy] = useState<'SCALP' | 'SWING' | 'AGGRESSIVE'>('SCALP');
-  const [mempool, setMempool] = useState<any[]>([]);
-  const [topoData, setTopoData] = useState<any[]>([]);
-  const [graphData, setGraphData] = useState<any>(null);
-  const [techData, setTechData] = useState<any>(null);
-  const [mcChart, setMcChart] = useState<number[]>([]);
-  const [volChart, setVolChart] = useState<number[]>([]);
+  const [userMode, setUserMode] = useState<UserMode>(UserMode.RETAIL);
+  const [lang, setLang] = useState<Language>(Language.EN);
+  const [activeView, setActiveView] = useState<ViewState>(ViewState.MARKET_SURFACE);
+  const [marketSurface, setMarketSurface] = useState<TokenData[]>([]);
   const [currentToken, setCurrentToken] = useState<EnhancedTokenData | null>(null);
-  const [activeAddress, setActiveAddress] = useState<string | null>(null);
-  const [tradingCapital, setTradingCapital] = useState(5000);
-  const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isExecuting, setIsExecuting] = useState(false);
   const [report, setReport] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [techData, setTechData] = useState<any>(null);
+  const [mempool, setMempool] = useState<any[]>([]);
+  const [walletData, setWalletData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [transfers, setTransfers] = useState<EntityTransfer[]>([]);
+  const [selectedTransfer, setSelectedTransfer] = useState<any>(null);
+  const [capital, setCapital] = useState(5000);
+  
+  // Gating State
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authKey, setAuthKey] = useState('');
+  const [isGated, setIsGated] = useState(false);
 
-  const updateCounter = useRef(0);
+  // Execution State
+  const [isExecutionModalOpen, setIsExecutionModalOpen] = useState(false);
 
-  /**
-   * HIGH-PRECISION PRICE FORMATTER
-   * - 10 decimal places for prices < 1
-   * - 2-3 decimal places for prices >= 1
-   */
-  const formatPrice = (price: number) => {
-    if (price === 0) return "0.0000";
-    if (price < 1) {
-      return price.toFixed(10);
+  const t = translations[lang];
+
+  // Sync capital to mode constraints
+  useEffect(() => {
+    if (userMode === UserMode.INSTITUTIONAL) {
+      if (capital < 500000) setCapital(500000);
+    } else {
+      if (capital > 500000) setCapital(500000);
     }
-    return price.toLocaleString(undefined, { 
-      minimumFractionDigits: 2, 
-      maximumFractionDigits: 3 
-    });
-  };
+  }, [userMode]);
+
+  // Auto-scan Top 500
+  useEffect(() => {
+    const scan = async () => {
+      const data = await fetchTopMarkets();
+      setMarketSurface(data);
+      if (userMode === UserMode.INSTITUTIONAL && !currentToken) {
+        handleTokenSelect(data[0]);
+      }
+    };
+    scan();
+  }, [userMode]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      const baseGas = 30 + Math.random() * 20;
-      setMempool(generateMempoolData(baseGas));
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (!activeAddress || !currentToken) return;
-
-    const syncMarketData = async () => {
-      const updatedData = await fetchTokenByAddress(activeAddress);
-      if (updatedData) {
-        setCurrentToken(updatedData);
-        setTopoData(generateTopographyData(updatedData.priceUsd));
-        if (!isAnalyzing) {
-          setTechData(generateTechnicalData(updatedData.priceUsd));
-        }
-
-        updateCounter.current += 1;
-        if (updateCounter.current >= 3) {
-          setMcChart(prev => [...prev.slice(-19), updatedData.marketCap]);
-          setVolChart(prev => [...prev.slice(-19), updatedData.volume24h]);
-          updateCounter.current = 0;
+      setMempool(generateMempoolData(35));
+      
+      if (currentToken) {
+        if (userMode === UserMode.INSTITUTIONAL) {
+          // Institutional Feed
+          const entity = INSTITUTIONS[Math.floor(Math.random() * INSTITUTIONS.length)];
+          const type = TRANSFER_TYPES[Math.floor(Math.random() * TRANSFER_TYPES.length)];
+          const newTransfer: EntityTransfer = {
+            id: Math.random().toString(),
+            from: `${entity}: Institutional Node`,
+            to: 'Binance: Hot Wallet 04',
+            amount: Math.random() * 500000,
+            symbol: currentToken.symbol,
+            time: new Date().toLocaleTimeString(),
+            entity: entity,
+            type: type,
+            hash: '0x' + Math.random().toString(16).slice(2, 42),
+            gas: (Math.random() * 100).toFixed(2) + ' Gwei'
+          };
+          setTransfers(prev => [newTransfer, ...prev].slice(0, 8));
+        } else {
+          // Retail Alpha Feed
+          const source = RETAIL_ALPHA_SOURCES[Math.floor(Math.random() * RETAIL_ALPHA_SOURCES.length)];
+          const sentiment = Math.random() > 0.5 ? 'BULLISH' : 'NEUTRAL';
+          const newTransfer: EntityTransfer = {
+            id: Math.random().toString(),
+            from: source,
+            to: 'Retail Trend Monitor',
+            amount: Math.random() * 20000,
+            symbol: currentToken.symbol,
+            time: new Date().toLocaleTimeString(),
+            entity: source,
+            type: 'Social Pulse',
+            sentiment: sentiment as any,
+            hash: 'N/A - Off-chain Signal',
+            gas: 'N/A'
+          };
+          setTransfers(prev => [newTransfer, ...prev].slice(0, 8));
         }
       }
-    };
-
-    const interval = setInterval(syncMarketData, 10000);
+    }, 4500);
     return () => clearInterval(interval);
-  }, [activeAddress, currentToken, isAnalyzing]);
+  }, [currentToken, userMode]);
+
+  useEffect(() => {
+    if (currentToken) {
+      setWalletData(generateWalletGraph(currentToken.symbol, userMode));
+    }
+  }, [currentToken, userMode]);
+
+  const handleTokenSelect = (token: TokenData) => {
+    setCurrentToken(token as EnhancedTokenData);
+    setTechData(generateTechnicalData(token.priceUsd));
+    setReport(null);
+    if (userMode === UserMode.INSTITUTIONAL && activeView === ViewState.MARKET_SURFACE) {
+      setActiveView(ViewState.TECHNICAL);
+    }
+  };
+
+  const trySwitchMode = (mode: UserMode) => {
+    if (mode === UserMode.INSTITUTIONAL && !isGated) {
+      setShowAuthModal(true);
+    } else {
+      setUserMode(mode);
+      setTransfers([]); // Clear feed to swap sources
+    }
+  };
+
+  const handleVerify = () => {
+    if (authKey.length >= 4) {
+      setIsGated(true);
+      setUserMode(UserMode.INSTITUTIONAL);
+      setShowAuthModal(false);
+      setTransfers([]);
+    } else {
+      setError("Invalid Access Token");
+    }
+  };
+
+  const runAnalysis = async () => {
+    if (!currentToken) return;
+    setIsAnalyzing(true);
+    try {
+      const res = await getMEVAnalysis(userMode, {
+        token: currentToken.name,
+        price: currentToken.priceUsd,
+        marketCap: currentToken.marketCap,
+        strategy: 'QUANT',
+        technicals: techData
+      });
+      setReport(res);
+    } catch (e) {
+      setError("Prediction Engine Timeout.");
+    }
+    setIsAnalyzing(false);
+  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery) return;
+    
     setIsSearching(true);
     setError(null);
     
     try {
       const data = await fetchTokenByAddress(searchQuery);
       if (data) {
-        setCurrentToken(data);
-        setActiveAddress(searchQuery);
-        setGraphData(generateWalletGraph());
-        setTopoData(generateTopographyData(data.priceUsd));
-        setTechData(generateTechnicalData(data.priceUsd));
-        setMcChart(generateMetricChartData(data.marketCap));
-        setVolChart(generateMetricChartData(data.volume24h));
-        setReport(null);
-        updateCounter.current = 0;
+        handleTokenSelect(data);
+        setSearchQuery('');
       } else {
-        setError("Network Protocol mismatch. Input address integrity failure.");
+        setError("Meta-Search found no matches. Check address/chain.");
       }
     } catch (err) {
-      setError("Critical Link Interruption. Switching to local simulation.");
+      setError("Deep search protocol failed.");
     } finally {
       setIsSearching(false);
     }
   };
 
-  const runDeFiScan = async () => {
-    if (!currentToken || !techData) return;
-    setIsAnalyzing(true);
-    setError(null);
-    try {
-      const visualContext = activeView === ViewState.MEMPOOL 
-        ? `Retina Scan [${strategy}]: Detecting galactic mempool clusters for institutional intent.`
-        : activeView === ViewState.TOPOGRAPHY
-        ? "Topology Scan: Mapping liquidity bid/ask depth for structural imbalances."
-        : activeView === ViewState.GRAPH
-        ? "Graph Scan: Tracing sniper wallet clusters to primary MEV controllers."
-        : `Technical Scan: Cross-referencing RSI ${techData?.rsi?.toFixed(2) || 'N/A'} with strategy constraints.`;
-
-      const res = await getMEVAnalysis(visualContext, {
-        mode: activeView,
-        token: `${currentToken.name} (${currentToken.symbol})`,
-        gas: 35,
-        price: currentToken.priceUsd,
-        marketCap: currentToken.marketCap,
-        volume: currentToken.volume24h,
-        strategy: strategy,
-        technicals: techData
-      });
-      setReport(res);
-    } catch (err) {
-      setError("Fusion Core Interrupted. Signal lost due to high volatility.");
-    }
-    setIsAnalyzing(false);
-  };
-
-  /**
-   * NQ SWAP INTEGRATION
-   * Redirects to NQ Swap DEX with pre-filled contract address
-   */
-  const executeOnNQSwap = () => {
-    if (!activeAddress) return;
-    const url = `https://www.nq-swap.xyz/nq-swap?token=${activeAddress}`;
-    window.open(url, '_blank');
+  const formatPrice = (p: number | undefined | null) => {
+    if (p === undefined || p === null || isNaN(p)) return '---';
+    return p < 1 ? p.toFixed(8) : p.toLocaleString(undefined, { maximumFractionDigits: 4 });
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-[#d1d1d1] flex flex-col lg:flex-row font-sans overflow-x-hidden selection:bg-red-500 selection:text-white">
-      {/* SIDEBAR NAVIGATION */}
-      <nav className="w-full lg:w-20 lg:min-h-screen border-b lg:border-r border-white/5 flex lg:flex-col items-center justify-between lg:justify-start p-4 lg:py-10 gap-10 bg-[#080808] z-50">
-        <div className="p-3 bg-red-600 rounded-2xl text-white shadow-[0_0_30px_rgba(220,38,38,0.4)] animate-pulse">
-          <ShieldAlert size={28} />
+    <div className={`min-h-screen ${userMode === UserMode.INSTITUTIONAL ? 'bg-[#050505]' : 'bg-[#080808]'} text-white flex flex-col lg:flex-row overflow-hidden font-sans transition-colors duration-1000`}>
+      
+      {/* MODE CONTROLLER SIDEBAR */}
+      <nav className="w-full lg:w-24 border-r border-white/5 bg-black/40 backdrop-blur-xl flex lg:flex-col items-center py-10 gap-8 z-50">
+        <div className={`p-4 rounded-2xl ${userMode === UserMode.INSTITUTIONAL ? 'bg-blue-600 shadow-[0_0_30px_rgba(37,99,235,0.4)]' : 'bg-red-600 shadow-[0_0_30px_rgba(220,38,38,0.4)]'} transition-all duration-700`}>
+          <ShieldAlert size={32} />
         </div>
         
-        <div className="flex lg:flex-col gap-4 lg:gap-10">
-          {[
-            { id: ViewState.MEMPOOL, icon: Activity, label: 'Retina' },
-            { id: ViewState.TOPOGRAPHY, icon: MapIcon, label: 'Topo' },
-            { id: ViewState.GRAPH, icon: Share2, label: 'Graph' },
-            { id: ViewState.TECHNICAL, icon: TrendingUp, label: 'Tech' }
-          ].map((item) => (
-            <button 
-              key={item.id}
-              onClick={() => setActiveView(item.id)}
-              className={`group p-4 rounded-2xl transition-all duration-500 flex flex-col items-center gap-1 ${activeView === item.id ? 'bg-red-600 text-white shadow-[0_0_25px_rgba(239,68,68,0.6)] scale-110' : 'text-gray-600 hover:text-white hover:bg-white/5'}`}
-            >
-              <item.icon size={24} className="group-hover:rotate-12 transition-transform" />
-              <span className="text-[7px] font-black uppercase lg:hidden mt-2 tracking-widest">{item.label}</span>
-            </button>
-          ))}
+        <div className="flex lg:flex-col gap-6">
+          <button 
+            onClick={() => trySwitchMode(UserMode.INSTITUTIONAL)}
+            className={`p-4 rounded-xl transition-all ${userMode === UserMode.INSTITUTIONAL ? 'bg-blue-600/20 text-blue-500' : 'text-gray-600 hover:text-white'}`}
+            title="Institutional"
+          >
+            <Briefcase size={24} />
+          </button>
+          <button 
+            onClick={() => trySwitchMode(UserMode.RETAIL)}
+            className={`p-4 rounded-xl transition-all ${userMode === UserMode.RETAIL ? 'bg-red-600/20 text-red-500' : 'text-gray-600 hover:text-white'}`}
+            title="Retail"
+          >
+            <User size={24} />
+          </button>
+        </div>
+
+        <div className="mt-8 lg:mt-12 flex lg:flex-col gap-4 border-t border-white/5 pt-8">
+           {[Language.EN, Language.ZH, Language.RU].map(l => (
+             <button 
+                key={l}
+                onClick={() => setLang(l)}
+                className={`text-[10px] font-black w-10 h-10 rounded-full flex items-center justify-center border transition-all ${lang === l ? 'bg-white/10 border-white/30 text-white' : 'border-transparent text-gray-600 hover:text-gray-400'}`}
+             >
+               {l}
+             </button>
+           ))}
+        </div>
+
+        <div className="mt-auto hidden lg:flex flex-col gap-6">
+          <button 
+            onClick={() => setActiveView(ViewState.MARKET_SURFACE)} 
+            className={`p-4 transition-all ${activeView === ViewState.MARKET_SURFACE ? 'text-blue-400' : 'text-gray-600 hover:text-white'}`}
+            title={t.nav_surface}
+          >
+            <Grid size={22}/>
+          </button>
+          <button 
+            onClick={() => setActiveView(ViewState.TECHNICAL)} 
+            className={`p-4 transition-all ${activeView === ViewState.TECHNICAL ? 'text-blue-400' : 'text-gray-600 hover:text-white'}`}
+            title={t.nav_quant}
+          >
+            <Layers size={22}/>
+          </button>
+          <button 
+            onClick={() => setActiveView(ViewState.GRAPH)} 
+            className={`p-4 transition-all ${activeView === ViewState.GRAPH ? 'text-blue-400' : 'text-gray-600 hover:text-white'}`}
+            title={t.nav_topology}
+          >
+            <Network size={22}/>
+          </button>
         </div>
       </nav>
 
-      {/* MAIN COMMAND CENTER */}
-      <main className="flex-1 flex flex-col min-w-0">
-        {/* COMMAND HEADER */}
-        <header className="h-auto lg:h-24 border-b border-white/5 flex flex-col lg:flex-row items-center px-6 lg:px-10 py-4 lg:py-0 justify-between bg-[#080808] gap-6 relative">
-          <div className="absolute bottom-0 left-0 h-[2px] bg-red-600/20 w-full overflow-hidden">
-             <div className="h-full bg-red-600 w-24 animate-[slide_3s_infinite_linear]" />
+      {/* DASHBOARD AREA */}
+      <main className="flex-1 flex flex-col h-screen overflow-hidden">
+        
+        {/* HEADER */}
+        <header className="h-20 border-b border-white/5 flex items-center px-10 justify-between bg-black/20 backdrop-blur-md">
+          <div className="flex items-center gap-6">
+            <h1 className="text-xs font-black uppercase tracking-[0.4em] text-gray-500">
+              {userMode === UserMode.INSTITUTIONAL ? t.title_inst : t.title_retail}
+            </h1>
+            <div className="flex items-center gap-4 ml-6 border-l border-white/10 pl-6">
+               <div className="flex items-center gap-2">
+                  <Database size={14} className="text-gray-600" />
+                  <span className="text-[10px] font-black uppercase text-gray-500">
+                    {userMode === UserMode.INSTITUTIONAL ? t.network_inst : t.network_retail}
+                  </span>
+               </div>
+            </div>
           </div>
 
-          <div className="flex flex-col lg:flex-row items-center gap-6 w-full lg:w-auto">
-            <form onSubmit={handleSearch} className="relative w-full lg:w-[450px] group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-red-500 transition-colors" size={20} />
+          <div className="flex items-center gap-6">
+            <form onSubmit={handleSearch} className="relative group">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                 {isSearching ? <RefreshCw size={14} className="text-blue-500 animate-spin" /> : <Search size={14} className="text-gray-500 group-focus-within:text-blue-500" />}
+              </div>
               <input 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Institutional Asset Discovery (Contract)..."
-                className="w-full bg-black border border-white/10 rounded-2xl py-4 pl-14 pr-4 text-[13px] mono focus:border-red-600 outline-none transition-all shadow-inner focus:shadow-[0_0_20px_rgba(239,68,68,0.1)]"
+                placeholder="Contract Discovery (Multi-Chain)..." 
+                className="bg-white/5 border border-white/10 rounded-xl py-2 pl-10 pr-4 text-[11px] mono focus:border-blue-600 outline-none w-80 transition-all"
+                disabled={isSearching}
               />
-              {isSearching && <RefreshCw className="absolute right-4 top-1/2 -translate-y-1/2 text-red-500 animate-spin" size={18} />}
             </form>
-            <div className="flex items-center gap-3 bg-white/5 px-5 py-3 rounded-2xl border border-white/10 w-full lg:w-auto hover:border-red-600/30 transition-colors cursor-pointer group">
-              <Filter size={18} className="text-gray-500 group-hover:text-red-500 transition-colors" />
-              <select 
-                value={strategy}
-                onChange={(e) => setStrategy(e.target.value as any)}
-                className="bg-transparent text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 outline-none w-full cursor-pointer appearance-none"
-              >
-                <option value="SCALP">Scalp Vector [ &lt;24h ]</option>
-                <option value="SWING">Swing Momentum [ 48-72h ]</option>
-                <option value="AGGRESSIVE">Degen Indigenous [ &lt;1h ]</option>
-              </select>
-            </div>
-          </div>
-          
-          {currentToken && (
-            <div className="flex items-center gap-6 bg-gradient-to-r from-red-600/10 to-transparent px-8 py-3 rounded-[24px] border border-red-600/20 w-full lg:w-auto animate-fade-in shadow-2xl relative overflow-hidden group">
-              <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-              <img src={currentToken.image} className="w-10 h-10 rounded-full border-2 border-white/10 shadow-xl" alt={currentToken.name} />
-              <div className="flex flex-col">
-                <div className="flex items-center gap-2 mb-1">
-                   <span className="text-[10px] text-red-500 font-black uppercase tracking-[0.3em]">{currentToken.name}</span>
-                   <div className="flex items-center gap-2">
-                     {techData?.oracleVerified && (
-                       <div className="flex items-center gap-1.5 text-blue-400 text-[8px] mono font-black bg-blue-400/10 px-2 py-0.5 rounded-full border border-blue-400/20">
-                         <LinkIcon size={10}/> ORACLE_SYNC
-                       </div>
-                     )}
-                     {currentToken.isSimulated && (
-                       <div className="flex items-center gap-1.5 text-amber-400 text-[8px] mono font-black bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20 animate-pulse">
-                         <WifiOff size={10}/> SIMULATED_STREAM
-                       </div>
-                     )}
-                   </div>
+
+            {currentToken && (
+              <div className="flex items-center gap-6 animate-fade-in">
+                <div className="text-right">
+                  <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
+                    {currentToken.symbol} / USD
+                    {currentToken.chain && <span className="ml-2 text-blue-500 px-1.5 py-0.5 bg-blue-500/10 rounded uppercase">{currentToken.chain}</span>}
+                  </div>
+                  <div className="text-xl font-black mono text-green-400">${formatPrice(currentToken.priceUsd)}</div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-base font-black text-white">{currentToken.symbol}</span>
-                  <span className="text-xl font-black text-green-400 mono tracking-tighter transition-all duration-1000">
-                    ${formatPrice(currentToken.priceUsd)}
-                  </span>
-                </div>
+                <img src={currentToken.image} className="w-10 h-10 rounded-full border border-white/10" />
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </header>
 
-        {/* FUSION VIEWPORT */}
-        <div className="flex-1 p-6 lg:p-10 grid grid-cols-12 gap-8 lg:gap-10 overflow-y-auto lg:overflow-hidden bg-[radial-gradient(circle_at_top,_#0e0e0e_0%,_#050505_100%)]">
+        {/* WORKSPACE CONTENT */}
+        <div className="flex-1 p-8 grid grid-cols-12 gap-8 overflow-y-auto scrollbar-hide">
           
-          {/* VISUAL ANALYTICS COLUMN */}
           <div className="col-span-12 lg:col-span-8 flex flex-col gap-8">
-            <section className="flex-1 min-h-[550px] bg-black/80 rounded-[48px] border border-white/5 relative overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.8)] backdrop-blur-3xl group transition-all duration-700 hover:border-white/10">
-              <div className="absolute top-10 left-10 z-30 flex flex-col gap-2">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-red-600/10 rounded-xl text-red-600"><Cpu size={20}/></div>
-                  <h1 className="text-4xl font-black uppercase tracking-tighter text-white drop-shadow-2xl">
-                    {activeView === ViewState.MEMPOOL ? 'Energy Retina' : 
-                     activeView === ViewState.TOPOGRAPHY ? 'Liquidity Topology' : 
-                     activeView === ViewState.GRAPH ? 'Wallet Topology' : 'Radar Spectrogram'}
-                  </h1>
-                </div>
-                <div className="flex items-center gap-3 ml-12">
-                  <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-ping shadow-[0_0_15px_rgba(239,68,68,1)]" />
-                  <span className="text-[11px] mono text-gray-500 tracking-[0.5em] uppercase font-bold">FUSION_LINK // {activeView}</span>
-                </div>
-              </div>
-
-              {/* RETINA INTERPRETATION OVERLAY */}
-              {report?.retina_interpretation && activeView === ViewState.MEMPOOL && (
-                <div className="absolute bottom-10 left-10 right-10 z-30 bg-black/60 backdrop-blur-xl p-6 rounded-[32px] border border-white/10 animate-fade-in-up">
-                  <div className="flex items-center gap-3 mb-2">
-                    <Binary size={16} className="text-red-500" />
-                    <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Retina Interpretation</span>
-                  </div>
-                  <p className="text-sm text-white/80 font-medium leading-relaxed italic">"{report.retina_interpretation}"</p>
-                </div>
-              )}
-
-              <div className="absolute inset-0 flex items-center justify-center p-12">
-                {activeView === ViewState.MEMPOOL && (
-                  <div className="scale-110"><RetinaDisplay data={mempool.map(tx => tx.gasPrice)} type="GAF" /></div>
-                )}
-
-                {activeView === ViewState.TOPOGRAPHY && (
-                  <div className="w-full flex flex-col items-center gap-12 animate-fade-in">
-                    <div className="w-full flex items-end justify-center gap-4 h-96 px-16 relative">
-                      {topoData.map((tick, i) => (
-                        <div 
-                          key={i} 
-                          className={`flex-1 rounded-t-[20px] transition-all duration-[1.5s] relative group/bar ${tick.isPeak ? 'bg-gradient-to-t from-blue-700 to-cyan-500 shadow-[0_0_50px_rgba(37,99,235,0.4)]' : 'bg-white/5'}`}
-                          style={{ height: `${tick.depth}%` }}
-                        >
-                           {tick.isPeak && <div className="absolute inset-0 bg-white/30 animate-pulse rounded-t-[20px]" />}
-                           <div className="absolute -top-10 left-1/2 -translate-x-1/2 opacity-0 group-hover/bar:opacity-100 transition-all text-xs mono text-blue-400 font-black translate-y-2 group-hover/bar:translate-y-0">
-                             {tick.depth.toFixed(0)}%
-                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {activeView === ViewState.GRAPH && (
-                  <div className="scale-110 w-full h-full"><WalletGraph data={graphData} /></div>
-                )}
-
-                {activeView === ViewState.TECHNICAL && techData && (
-                  <div className="w-full max-w-4xl flex flex-col gap-12 animate-fade-in">
-                     {/* Execution Vector Visualizer */}
-                     {report && (
-                       <div className="bg-white/5 p-10 rounded-[40px] border border-white/5 relative overflow-hidden">
-                         <div className="flex justify-between items-center mb-10">
-                            <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Execution Vector Alignment</span>
-                            <div className="px-4 py-1.5 bg-green-500/10 border border-green-500/30 rounded-full text-[10px] font-black text-green-500 mono">P_SUCCESS: {((report.probability_success || 0) * 100).toFixed(0)}%</div>
+            
+            {/* INTELLIGENCE BAR */}
+            {currentToken && (
+              <div className="grid grid-cols-4 gap-4">
+                 {[
+                   { label: 'Asset Sector', value: currentToken.sector || 'DeFi', icon: <Grid size={12}/>, source: 'MESSARI' },
+                   { label: 'Volatility Index', value: `${(currentToken.volatility || 0.5).toFixed(2)}σ`, icon: <Activity size={12}/>, source: 'MESSARI' },
+                   { label: 'Market Dominance', value: `${(currentToken.dominance || 0).toFixed(2)}%`, icon: <TrendingUp size={12}/>, source: 'MESSARI' },
+                   { label: 'MM Activity', value: currentToken.mktMakerActivity || 'HIGH', icon: <Database size={12}/>, source: 'WINTERMUTE' }
+                 ].map((metric, i) => (
+                   <div key={i} className="bg-[#0a0a0a] border border-white/5 p-4 rounded-2xl flex flex-col gap-2 group hover:border-indigo-500/30 transition-all">
+                      <div className="flex justify-between items-center">
+                         <div className="p-1.5 bg-white/5 rounded-lg text-gray-500 group-hover:text-indigo-400 transition-colors">
+                            {metric.icon}
                          </div>
-                         <div className="relative h-24 flex items-center">
-                            <div className="absolute inset-x-0 h-px bg-white/10" />
-                            {/* Stop Loss */}
-                            <div className="absolute flex flex-col items-center gap-2" style={{ left: '10%' }}>
-                              <div className="h-4 w-px bg-red-600" />
-                              <span className="text-[8px] mono text-red-600 font-bold uppercase">STOP: ${formatPrice(report.stop_loss || currentToken?.priceUsd * 0.9)}</span>
-                            </div>
-                            {/* Entry */}
-                            <div className="absolute flex flex-col items-center gap-2" style={{ left: '30%' }}>
-                              <div className="h-8 w-px bg-blue-500" />
-                              <span className="text-[8px] mono text-blue-500 font-bold uppercase">ENTRY: ${formatPrice(report.entry_price)}</span>
-                            </div>
-                            {/* Current */}
-                            <div className="absolute flex flex-col items-center gap-2 z-10" style={{ left: '45%' }}>
-                              <div className="w-4 h-4 rounded-full bg-white animate-ping" />
-                              <span className="text-[8px] mono text-white font-black uppercase">CURRENT: ${formatPrice(currentToken?.priceUsd || 0)}</span>
-                            </div>
-                            {/* Target */}
-                            <div className="absolute flex flex-col items-center gap-2" style={{ left: '85%' }}>
-                              <div className="h-8 w-px bg-green-500" />
-                              <span className="text-[8px] mono text-green-500 font-black uppercase">TARGET: ${formatPrice(report.target_exit)}</span>
-                            </div>
-                         </div>
-                         <p className="mt-8 text-xs text-gray-500 leading-relaxed font-medium italic">"Execution rationale: {report.retail_reasoning}"</p>
-                       </div>
-                     )}
-
-                     <div className="grid grid-cols-2 gap-8">
-                        <div className="bg-white/5 p-8 rounded-[32px] border border-white/5">
-                           <div className="flex justify-between items-center mb-6">
-                              <span className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]">Momentum (RSI)</span>
-                              <span className={`text-xl font-black mono ${techData.rsi > 70 ? 'text-red-500' : techData.rsi < 30 ? 'text-green-500' : 'text-blue-400'}`}>{techData.rsi.toFixed(2)}</span>
-                           </div>
-                           <div className="h-2 bg-white/10 rounded-full relative">
-                              <div className="absolute top-0 bottom-0 bg-red-600 shadow-[0_0_10px_red] transition-all duration-1000" style={{ width: `${techData.rsi}%` }} />
-                           </div>
-                        </div>
-                        <div className="bg-white/5 p-8 rounded-[32px] border border-white/5">
-                           <div className="flex justify-between items-center mb-6">
-                              <span className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]">Orderbook Delta</span>
-                              <Layers size={18} className="text-gray-500" />
-                           </div>
-                           <div className="flex items-end gap-3">
-                             <div className={`text-3xl font-black uppercase tracking-tighter ${techData.obImbalance > 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                {(techData.obImbalance * 100).toFixed(1)}%
-                             </div>
-                             <div className="text-[9px] text-gray-600 mb-1 mono font-black">IMBALANCE</div>
-                           </div>
-                        </div>
-                     </div>
-                  </div>
-                )}
+                         <span className="text-[7px] font-black px-1.5 py-0.5 bg-white/5 text-gray-500 rounded uppercase tracking-widest">{metric.source}</span>
+                      </div>
+                      <div>
+                         <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest">{metric.label}</span>
+                         <div className="text-sm font-black text-white uppercase tracking-tight">{metric.value}</div>
+                      </div>
+                   </div>
+                 ))}
               </div>
-            </section>
+            )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 h-40">
-              <div className="bg-[#0a0a0a] rounded-[32px] border border-white/5 p-8 relative overflow-hidden group hover:border-blue-500/40 transition-all shadow-2xl">
-                <div className="relative z-10 flex justify-between items-start">
-                  <div>
-                    <span className="text-[10px] text-gray-500 font-black uppercase tracking-[0.3em] block mb-2">Institutional MCAP</span>
-                    <span className="text-3xl font-black text-white mono tracking-tighter">${currentToken ? (currentToken.marketCap / 1e6).toFixed(2) + 'M' : '---'}</span>
+            {activeView === ViewState.MARKET_SURFACE && (
+              <div className="bg-[#0a0a0a] rounded-[32px] border border-white/5 overflow-hidden flex flex-col h-[650px] shadow-2xl">
+                 <div className="p-6 border-b border-white/5 flex justify-between items-center bg-black/40">
+                   <h2 className="text-[11px] font-black uppercase tracking-[0.2em] flex items-center gap-3 text-blue-500">
+                     <Binary size={16}/> {userMode === UserMode.INSTITUTIONAL ? "Institutional Liquidity Surface" : "Retail Market Pulse"}
+                   </h2>
+                   <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                         <span className="text-[9px] font-black text-gray-500 uppercase">REAL-TIME LD4 SCANNER</span>
+                      </div>
+                   </div>
+                 </div>
+                 <div className="flex-1 overflow-y-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead className="sticky top-0 bg-[#0a0a0a] z-10 text-[9px] uppercase text-gray-600 border-b border-white/5 font-black">
+                        <tr>
+                          <th className="p-5">Asset</th>
+                          <th className="p-5">Price</th>
+                          <th className="p-5">24h Change</th>
+                          <th className="p-5">Market Cap</th>
+                          <th className="p-5 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-xs mono">
+                        {marketSurface.map((token) => (
+                          <tr 
+                            key={token.id} 
+                            onClick={() => handleTokenSelect(token)}
+                            className={`border-b border-white/5 transition-all cursor-pointer ${currentToken?.id === token.id ? 'bg-blue-600/10 border-blue-500/20' : 'hover:bg-white/5'}`}
+                          >
+                            <td className="p-5 flex items-center gap-4">
+                              <img src={token.image} className="w-7 h-7 rounded-full" />
+                              <div className="font-black text-white">{token.symbol}</div>
+                            </td>
+                            <td className="p-5 font-bold">${formatPrice(token.priceUsd)}</td>
+                            <td className={`p-5 font-black ${token.priceChange24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                              {token.priceChange24h.toFixed(2)}%
+                            </td>
+                            <td className="p-5 text-gray-400">${(token.marketCap / 1e9).toFixed(2)}B</td>
+                            <td className="p-5 text-right"><ChevronRight size={16} className="ml-auto text-gray-700" /></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                 </div>
+              </div>
+            )}
+
+            {activeView === ViewState.TECHNICAL && (
+              <div className="flex flex-col gap-8 h-full">
+                <div className="grid grid-cols-2 gap-8 h-[500px]">
+                  <RetinaDisplay data={mempool.map(t => t.gasPrice)} type="GAF" />
+                  <div className="bg-[#0a0a0a] rounded-[32px] border border-white/5 overflow-hidden flex flex-col p-6">
+                    <h3 className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+                      <Target size={14}/> L3 Liquidity Depth
+                    </h3>
+                    <LiquidityHeatmap 
+                      bids={Array.from({length: 10}, (_, i) => ({ price: (currentToken?.priceUsd || 100) - i*0.1, size: Math.random() * 10, isAnomalous: Math.random() > 0.8 }))} 
+                      asks={Array.from({length: 10}, (_, i) => ({ price: (currentToken?.priceUsd || 100) + i*0.1, size: Math.random() * 10, isAnomalous: Math.random() > 0.8 }))} 
+                    />
                   </div>
-                  <div className="p-3 bg-blue-500/10 rounded-2xl text-blue-500"><BarChart3 size={24} /></div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="bg-[#0a0a0a] rounded-[24px] border border-white/5 p-6 shadow-xl relative overflow-hidden group">
+                     <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest block mb-1">Wyckoff Phase</span>
+                     <div className="text-xl font-black text-white">{techData?.marketStructure || 'SCANNING...'}</div>
+                  </div>
+                  <div className="bg-[#0a0a0a] rounded-[24px] border border-white/5 p-6 shadow-xl relative overflow-hidden">
+                     <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest block mb-1">OB Imbalance</span>
+                     <div className="text-xl font-black text-white">{((techData?.obImbalance || 0) * 100).toFixed(1)}%</div>
+                  </div>
+                  <div className="bg-[#0a0a0a] rounded-[24px] border border-white/5 p-6 shadow-xl relative overflow-hidden">
+                     <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest block mb-1">Institutional LPE</span>
+                     <div className="text-xl font-black text-blue-500">{report?.lpe_rating || '---'}%</div>
+                  </div>
                 </div>
               </div>
-              <div className="bg-[#0a0a0a] rounded-[32px] border border-white/5 p-8 relative overflow-hidden group hover:border-green-500/40 transition-all shadow-2xl">
-                <div className="relative z-10 flex justify-between items-start">
-                  <div>
-                    <span className="text-[10px] text-gray-500 font-black uppercase tracking-[0.3em] block mb-2">Liquidity Absorption (24H)</span>
-                    <span className="text-3xl font-black text-white mono tracking-tighter">${currentToken ? (currentToken.volume24h / 1e6).toFixed(2) + 'M' : '---'}</span>
-                  </div>
-                  <div className="p-3 bg-green-500/10 rounded-2xl text-green-500"><Waves size={24} /></div>
-                </div>
+            )}
+
+            {activeView === ViewState.GRAPH && (
+              <div className="h-[650px] bg-[#0a0a0a] rounded-[32px] border border-white/5 overflow-hidden shadow-2xl flex flex-col relative">
+                 <div className="p-6 border-b border-white/5 flex justify-between items-center bg-black/40 z-20">
+                   <div className="flex flex-col gap-1">
+                    <h2 className="text-[11px] font-black uppercase tracking-[0.2em] flex items-center gap-3 text-blue-500">
+                      <Network size={16}/> {userMode === UserMode.INSTITUTIONAL ? "Arkham Entity Topology" : "Social Alpha Graph"}
+                    </h2>
+                    <span className="text-[8px] text-gray-500 mono uppercase">Flow Data Aggregator</span>
+                   </div>
+                 </div>
+                 <div className="flex-1">
+                    <WalletGraph data={walletData} />
+                 </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className="col-span-12 lg:col-span-4 flex flex-col gap-8">
-            <div className="bg-gradient-to-br from-[#121212] to-[#080808] rounded-[56px] border border-white/10 p-10 shadow-[0_50px_100px_rgba(0,0,0,0.6)] flex flex-col min-h-[650px] relative overflow-hidden group/action">
-               <div className="absolute -top-32 -right-32 w-80 h-80 bg-red-600/15 blur-[120px] rounded-full group-hover/action:bg-red-600/20 transition-all duration-1000" />
-               <div className="absolute -bottom-32 -left-32 w-80 h-80 bg-blue-600/10 blur-[120px] rounded-full" />
+            
+            {/* MODE-SPECIFIC FEED PANEL */}
+            <div className="bg-[#0a0a0a] border border-white/5 rounded-[40px] p-8 shadow-2xl overflow-hidden flex flex-col max-h-[440px]">
+               <div className="flex justify-between items-center mb-6">
+                  <div className="flex items-center gap-3">
+                     <div className={`p-2 rounded-xl ${userMode === UserMode.INSTITUTIONAL ? 'bg-indigo-500/10 text-indigo-400' : 'bg-red-500/10 text-red-500'}`}>
+                        {userMode === UserMode.INSTITUTIONAL ? <ListFilter size={18} /> : <TrendingUp size={18} />}
+                     </div>
+                     <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-gray-400">
+                        {userMode === UserMode.INSTITUTIONAL ? t.feed_inst_title : t.feed_retail_title}
+                     </h2>
+                  </div>
+                  <span className={`text-[8px] font-black px-2 py-0.5 rounded border ${userMode === UserMode.INSTITUTIONAL ? 'text-indigo-400 bg-indigo-400/10 border-indigo-500/20' : 'text-red-400 bg-red-400/10 border-red-500/20'}`}>
+                    {userMode === UserMode.INSTITUTIONAL ? 'SOVEREIGN' : 'ALPHA_PULSE'}
+                  </span>
+               </div>
                
-               <div className="flex justify-between items-center mb-8 z-10">
-                 <h2 className="text-[12px] font-black uppercase text-gray-500 tracking-[0.5em] flex items-center gap-3">
-                   <Cpu size={18} className="text-red-600" /> Neural Directive
+               <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                  {transfers.length === 0 ? (
+                    <p className="text-[10px] text-gray-600 italic text-center py-10">
+                      {userMode === UserMode.INSTITUTIONAL ? t.feed_inst_desc : t.feed_retail_desc}
+                    </p>
+                  ) : (
+                    transfers.map(t_item => (
+                      <div 
+                        key={t_item.id} 
+                        onClick={() => setSelectedTransfer(t_item)}
+                        className={`p-4 bg-white/5 rounded-2xl border border-white/5 group hover:bg-white/10 transition-all cursor-pointer ${selectedTransfer?.id === t_item.id ? (userMode === UserMode.INSTITUTIONAL ? 'border-indigo-500 bg-indigo-500/5' : 'border-red-500 bg-red-500/5') : ''}`}
+                      >
+                         <div className="flex justify-between items-start mb-2">
+                            <span className={`text-[9px] font-black uppercase tracking-widest ${userMode === UserMode.INSTITUTIONAL ? 'text-indigo-400' : 'text-red-400'}`}>
+                              {t_item.entity}
+                            </span>
+                            <span className="text-[8px] text-gray-600 mono">{t_item.time}</span>
+                         </div>
+                         <div className="flex items-center gap-3 mb-2">
+                            <div className={`w-1.5 h-1.5 rounded-full ${userMode === UserMode.INSTITUTIONAL ? 'bg-indigo-500' : 'bg-red-500'}`} />
+                            <p className="text-[10px] text-gray-300 font-bold">
+                              {userMode === UserMode.INSTITUTIONAL ? `Trace: ${t_item.from.split(':')[0]} → Wallet` : `Alert: ${t_item.from}`}
+                            </p>
+                         </div>
+                         <div className="flex justify-between items-center">
+                            <span className="text-[11px] font-black text-white mono">
+                              {userMode === UserMode.INSTITUTIONAL ? `$${(t_item.amount || 0).toLocaleString()} ${t_item.symbol}` : `HEAT: +${(t_item.amount / 100).toFixed(0)}%`}
+                            </span>
+                            <span className="text-[7px] font-black px-1.5 py-0.5 bg-white/5 text-gray-500 rounded uppercase tracking-tighter">
+                              {userMode === UserMode.INSTITUTIONAL ? "DPI Available" : t_item.sentiment}
+                            </span>
+                         </div>
+                      </div>
+                    ))
+                  )}
+               </div>
+
+               {selectedTransfer && (
+                 <div className={`mt-4 p-5 rounded-3xl animate-pop-in relative border ${userMode === UserMode.INSTITUTIONAL ? 'bg-indigo-600/10 border-indigo-500/20' : 'bg-red-600/10 border-red-500/20'}`}>
+                    <button onClick={() => setSelectedTransfer(null)} className="absolute top-4 right-4 text-gray-500 hover:text-white">
+                      <X size={14} />
+                    </button>
+                    <h4 className="text-[10px] font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
+                      <Hash size={12} className={userMode === UserMode.INSTITUTIONAL ? 'text-indigo-400' : 'text-red-400'} /> 
+                      {userMode === UserMode.INSTITUTIONAL ? "Deep Packet Inspection" : "Social Alpha Breakdown"}
+                    </h4>
+                    <div className="space-y-3">
+                       <div className="flex justify-between">
+                          <span className="text-[8px] text-gray-500 font-black uppercase">Source</span>
+                          <span className="text-[9px] text-white mono font-bold">{selectedTransfer.entity}</span>
+                       </div>
+                       <div className="flex justify-between">
+                          <span className="text-[8px] text-gray-500 font-black uppercase">Operation</span>
+                          <span className={`text-[9px] mono font-bold ${userMode === UserMode.INSTITUTIONAL ? 'text-indigo-400' : 'text-red-400'}`}>
+                            {selectedTransfer.type}
+                          </span>
+                       </div>
+                       {userMode === UserMode.INSTITUTIONAL ? (
+                          <>
+                            <div className="flex justify-between">
+                                <span className="text-[8px] text-gray-500 font-black uppercase">Gas Payload</span>
+                                <span className="text-[9px] text-white mono">{selectedTransfer.gas}</span>
+                            </div>
+                            <div className="bg-black/40 p-2 rounded-lg border border-white/5">
+                                <span className="text-[7px] text-gray-600 font-black block mb-1">TX HASH</span>
+                                <span className="text-[8px] text-gray-400 mono break-all">{selectedTransfer.hash}</span>
+                            </div>
+                          </>
+                       ) : (
+                          <div className="bg-red-500/5 p-3 rounded-xl border border-red-500/10">
+                             <p className="text-[10px] text-gray-400 leading-relaxed italic">"Social volume spike detected on encrypted channels. High correlation with previous moonshot patterns."</p>
+                          </div>
+                       )}
+                    </div>
+                 </div>
+               )}
+            </div>
+
+            <div className={`rounded-[56px] border ${userMode === UserMode.INSTITUTIONAL ? 'bg-[#0f0f0f] border-blue-900/20' : 'bg-[#120a0a] border-red-900/20'} p-10 shadow-2xl flex flex-col min-h-[500px] relative overflow-hidden group transition-all duration-700`}>
+               <div className="absolute -top-32 -right-32 w-80 h-80 bg-blue-600/5 blur-[100px] rounded-full" />
+               <div className="flex justify-between items-center mb-10 z-10">
+                 <h2 className="text-[12px] font-black uppercase tracking-[0.4em] text-gray-500 flex items-center gap-3">
+                   <Cpu size={18} className={userMode === UserMode.INSTITUTIONAL ? 'text-blue-500' : 'text-red-500'} /> 
+                   {userMode === UserMode.INSTITUTIONAL ? t.prediction_24h : t.roi_signal}
                  </h2>
-                 {isAnalyzing && <RefreshCw size={24} className="animate-spin text-red-600" />}
+                 {isAnalyzing && <RefreshCw size={24} className="animate-spin text-blue-500" />}
                </div>
 
                {report ? (
                  <div className="animate-fade-in flex flex-col flex-1 z-10">
-                    <div className="flex items-center justify-between mb-6">
-                       <div className={`px-6 py-2.5 rounded-[20px] text-[12px] font-black border-2 shadow-2xl transition-all ${
-                         report?.directive?.includes('BUY') ? 'bg-green-600/10 border-green-600/30 text-green-400 shadow-green-600/20' :
-                         report?.directive?.includes('SELL') ? 'bg-red-600/10 border-red-600/30 text-red-400 shadow-red-600/20' :
-                         'bg-yellow-600/10 border-yellow-600/30 text-yellow-400 shadow-yellow-600/20'
+                    <div className="flex items-center justify-between mb-8">
+                       <div className={`px-5 py-1.5 rounded-full text-[10px] font-black border uppercase tracking-widest ${
+                         report.directive?.includes('BUY') ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'
                        }`}>
-                         {report?.directive?.replace('_', ' ') || 'UNDEFINED'}
+                         {report.directive?.replace('_', ' ') || 'NEUTRAL'}
                        </div>
                        <div className="flex flex-col items-end">
-                          <div className="text-[11px] font-black text-white tracking-widest uppercase">CONF: {report.confidence_score}%</div>
-                          <div className="h-1 w-24 bg-white/5 rounded-full mt-1 overflow-hidden">
-                             <div className="h-full bg-red-600" style={{ width: `${report.confidence_score}%` }} />
-                          </div>
+                          <span className="text-[9px] font-black text-gray-600 uppercase">Confidence</span>
+                          <span className="text-sm font-black text-white">{report.confidence_score}%</span>
                        </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 mb-8">
-                        <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
-                            <span className="text-[9px] text-gray-500 font-black uppercase block mb-1">Buy Range Min</span>
-                            <div className="text-xs font-black text-blue-400 mono">${formatPrice(report.suggested_buy_range?.min || currentToken?.priceUsd * 0.98)}</div>
-                        </div>
-                        <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
-                            <span className="text-[9px] text-gray-500 font-black uppercase block mb-1">Buy Range Max</span>
-                            <div className="text-xs font-black text-blue-400 mono">${formatPrice(report.suggested_buy_range?.max || currentToken?.priceUsd * 1.02)}</div>
-                        </div>
-                    </div>
-
-                    <h3 className="text-4xl font-black text-white uppercase tracking-tighter leading-[0.9] mb-4 drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)]">
+                    <h3 className="text-4xl font-black text-white uppercase tracking-tighter leading-none mb-6">
                       {report.action_title}
                     </h3>
                     
-                    <p className="text-sm text-gray-400 leading-relaxed font-medium mb-8 pl-6 border-l-2 border-red-600/60 italic">
-                      {report.retail_reasoning}
+                    <p className="text-sm text-gray-500 leading-relaxed font-medium mb-10">
+                      {userMode === UserMode.INSTITUTIONAL ? report.retina_interpretation : report.retail_reasoning}
                     </p>
 
-                    <div className="grid grid-cols-2 gap-4 mb-10">
-                       <div className="bg-white/5 p-5 rounded-3xl border border-white/10 group/stat">
-                          <span className="text-[10px] text-gray-500 font-black uppercase tracking-wider block mb-1">Entry Vector</span>
-                          <span className="text-sm font-black text-white mono">${formatPrice(report.entry_price)}</span>
-                       </div>
-                       <div className="bg-white/5 p-5 rounded-3xl border border-white/10 group/stat">
-                          <span className="text-[10px] text-gray-500 font-black uppercase tracking-wider block mb-1">Target Exit</span>
-                          <span className="text-sm font-black text-green-400 mono">${formatPrice(report.target_exit)}</span>
-                       </div>
-                    </div>
-
-                    {/* NQ SWAP DEEP LINK */}
                     <button 
-                        onClick={executeOnNQSwap}
-                        className="w-full py-6 bg-red-600 text-white font-black uppercase tracking-[0.4em] text-[11px] rounded-[28px] hover:bg-red-700 transition-all flex items-center justify-center gap-4 shadow-[0_20px_40px_rgba(220,38,38,0.3)] group/btn mb-4 active:scale-95"
+                      onClick={() => setIsExecutionModalOpen(true)}
+                      className="w-full py-6 bg-white text-black font-black uppercase tracking-[0.4em] text-[11px] rounded-[28px] hover:bg-gray-200 transition-all flex items-center justify-center gap-3 active:scale-95 shadow-2xl mt-auto"
                     >
-                        <ShoppingCart size={20} className="group-hover/btn:scale-110 transition-transform" />
-                        Execute on NQ Swap
+                      <ShoppingCart size={18} /> {t.execute_button}
                     </button>
-                    <div className="flex items-center justify-center gap-2 mb-8">
-                        <ShieldCheck size={14} className="text-green-500" />
-                        <span className="text-[9px] font-black uppercase text-gray-500 tracking-[0.2em]">Partnered with NQ Swap</span>
-                    </div>
                  </div>
                ) : (
-                 <div className="flex-1 flex flex-col items-center justify-center text-center py-20 opacity-30 z-10 animate-pulse">
-                    <Rocket size={80} className="mb-8 text-gray-500" />
-                    <p className="text-[10px] font-black uppercase tracking-[0.4em] max-w-[200px] text-gray-400 leading-loose">Initialize Directive for Execution Matrix</p>
+                 <div className="flex-1 flex flex-col items-center justify-center text-center py-20 opacity-20 z-10">
+                    <Rocket size={80} className="mb-8" />
+                    <p className="text-[10px] font-black uppercase tracking-[0.4em] max-w-[200px] leading-loose">Initialize Directive Terminal</p>
                  </div>
                )}
 
-               <button 
-                onClick={runDeFiScan}
-                disabled={!currentToken || isAnalyzing}
-                className="w-full py-8 bg-white text-black font-black uppercase tracking-[0.5em] text-[12px] rounded-[36px] hover:bg-red-600 hover:text-white transition-all duration-500 disabled:opacity-20 shadow-[0_20px_50px_rgba(255,255,255,0.15)] mt-auto active:scale-95 z-10"
-               >
-                 {currentToken ? `Generate High-Fidelity Signal` : 'Input Target Link'}
-               </button>
+               {!report && (
+                 <button 
+                  onClick={runAnalysis}
+                  disabled={!currentToken || isAnalyzing}
+                  className={`w-full py-7 font-black uppercase tracking-[0.5em] text-[12px] rounded-[36px] transition-all duration-500 shadow-2xl mt-auto active:scale-95 z-10 ${userMode === UserMode.INSTITUTIONAL ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-red-600 text-white hover:bg-red-700'}`}
+                 >
+                   {currentToken ? t.run_directive : t.scanning}
+                 </button>
+               )}
             </div>
-
-            <div className="scale-105 origin-top">
-              <ProfitSimulator 
-                capital={tradingCapital} 
-                onCapitalChange={setTradingCapital} 
-                report={report}
-                currentPrice={currentToken?.priceUsd || 0}
-                strategy={strategy}
-              />
-            </div>
+            
+            <ProfitSimulator 
+              capital={capital} 
+              onCapitalChange={setCapital} 
+              report={report} 
+              currentPrice={currentToken?.priceUsd || 0} 
+              strategy={userMode} 
+            />
           </div>
         </div>
       </main>
 
-      {error && (
-        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-red-600 text-white px-12 py-6 rounded-[40px] shadow-[0_40px_80px_rgba(220,38,38,0.6)] flex items-center gap-8 z-[200] animate-bounce-slow border-2 border-white/20">
-          <div className="p-3 bg-white/20 rounded-2xl"><Zap size={40} /></div>
-          <div>
-            <h4 className="font-black uppercase text-base tracking-[0.2em] mb-1">Signal Protocol Exception</h4>
-            <p className="text-xs font-bold opacity-90 mono tracking-wider">{error}</p>
+      {/* INSTITUTIONAL AUTH MODAL */}
+      {showAuthModal && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-black/90 backdrop-blur-xl animate-fade-in" onClick={() => setShowAuthModal(false)} />
+          <div className="relative w-full max-w-[400px] bg-[#0a0a0a] border border-blue-500/30 rounded-[40px] p-10 shadow-2xl text-center animate-pop-in">
+             <div className="w-20 h-20 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-8 border border-blue-500/30 shadow-[0_0_30px_rgba(37,99,235,0.2)]">
+                <Lock size={32} className="text-blue-500" />
+             </div>
+             <h3 className="text-lg font-black text-white uppercase tracking-widest mb-4">{t.auth_required}</h3>
+             <p className="text-xs text-gray-500 leading-relaxed mb-8">{t.auth_desc}</p>
+             
+             <div className="relative mb-6">
+                <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                <input 
+                  type="password"
+                  value={authKey}
+                  onChange={(e) => setAuthKey(e.target.value)}
+                  placeholder={t.auth_placeholder}
+                  className="w-full bg-black border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white mono font-bold focus:border-blue-500 outline-none transition-all"
+                />
+             </div>
+
+             <button 
+                onClick={handleVerify}
+                className="w-full py-5 bg-blue-600 text-white font-black uppercase text-[11px] tracking-[0.4em] rounded-full hover:bg-blue-700 transition-all shadow-xl flex items-center justify-center gap-3"
+             >
+               <CheckCircle size={18} /> {t.auth_button}
+             </button>
           </div>
-          <button onClick={() => setError(null)} className="ml-6 p-2 hover:bg-white/10 rounded-full transition-colors"><X size={24}/></button>
         </div>
       )}
 
-      <style>{`
-        @keyframes slide {
-          from { transform: translateX(-100%); }
-          to { transform: translateX(400%); }
-        }
-        @keyframes bounce-slow {
-          0%, 100% { transform: translate(-50%, 0); }
-          50% { transform: translate(-50%, -15px); }
-        }
-        @keyframes fade-in-up {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in-up { animation: fade-in-up 0.8s ease-out forwards; }
-        .animate-bounce-slow { animation: bounce-slow 4s infinite ease-in-out; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
-      `}</style>
+      {/* Execution Matrix Modal */}
+      <ExecutionModal 
+        isOpen={isExecutionModalOpen} 
+        onClose={() => setIsExecutionModalOpen(false)} 
+        token={currentToken}
+        userMode={userMode}
+        lang={lang}
+      />
+
+      {error && (
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-red-600 text-white px-10 py-5 rounded-full shadow-2xl flex items-center gap-6 z-[100] animate-bounce-slow">
+          <AlertCircle size={24} />
+          <span className="text-[10px] font-black uppercase tracking-widest">{error}</span>
+          <button onClick={() => setError(null)}><X size={20}/></button>
+        </div>
+      )}
     </div>
   );
 };

@@ -7,9 +7,8 @@ export const generateTechnicalData = (price: number): any => {
   const ema20 = price * (1 + (Math.random() - 0.5) * 0.02);
   const ema50 = price * (1 + (Math.random() - 0.5) * 0.05);
   
-  // Simulated Volume Delta (Buy Vol - Sell Vol)
-  const volDelta = (Math.random() - 0.45) * 1000000; // Slanted towards buy side
-  const obImbalance = (Math.random() - 0.4) * 0.5; // Orderbook imbalance (-0.5 to 0.5)
+  const volDelta = (Math.random() - 0.45) * 1000000; 
+  const obImbalance = (Math.random() - 0.4) * 0.5; 
   
   const structures: ('BULLISH' | 'BEARISH' | 'RANGING')[] = ['BULLISH', 'BEARISH', 'RANGING'];
   const marketStructure = structures[Math.floor(Math.random() * structures.length)];
@@ -22,18 +21,15 @@ export const generateTechnicalData = (price: number): any => {
     marketStructure,
     volDelta,
     obImbalance,
-    oracleVerified: Math.random() > 0.1 // 90% chance to be oracle verified
+    oracleVerified: Math.random() > 0.1 
   };
 };
 
-/**
- * Generates synthetic mempool data for gas heatmap visualization
- */
 export const generateMempoolData = (baseGas: number): any[] => {
   const txs = [];
   const now = Date.now();
   for (let i = 0; i < 50; i++) {
-    const isSandwich = i > 40; // Simulate a sandwich attack cluster
+    const isSandwich = i > 40;
     txs.push({
       id: `tx-${i}`,
       gasPrice: baseGas + (isSandwich ? 50 + Math.random() * 20 : Math.random() * 30),
@@ -47,39 +43,62 @@ export const generateMempoolData = (baseGas: number): any[] => {
 };
 
 /**
- * Generates topographical liquidity data (Uniswap V3 style)
+ * Generates token-specific global market topology with Arkham-style Entity Tagging
  */
-export const generateTopographyData = (midPrice: number): any[] => {
-  const ticks = [];
-  for (let i = -20; i < 20; i++) {
-    const price = midPrice * (1 + (i * 0.001));
-    const isPeak = Math.abs(i) === 5 || Math.abs(i) === 15;
-    ticks.push({
-      price,
-      depth: isPeak ? 80 + Math.random() * 20 : 10 + Math.random() * 30,
-      isPeak
-    });
-  }
-  return ticks;
-};
+export const generateWalletGraph = (symbol: string = 'ETH', mode: 'INSTITUTIONAL' | 'RETAIL' = 'INSTITUTIONAL') => {
+  const isInst = mode === 'INSTITUTIONAL';
+  
+  const nodes = [
+    // THE NQ SWAP INSTITUTIONAL HUB
+    { id: `NQ-SWAP-SOR`, group: 5, val: 120, type: 'CORE', label: 'NQ Swap: Smart Order Router' },
 
-/**
- * Generates wallet interaction graph data with enhanced node info
- */
-export const generateWalletGraph = () => {
-  const nodes = [{ id: 'Funder', group: 1, val: 50, type: 'CORE' }];
+    // INSTITUTIONAL MARKET MAKERS (Wintermute / Jump)
+    { id: `WINTERMUTE-MM`, group: 4, val: 90, type: 'CORE', label: 'Wintermute: Market Maker', noteType: 'Institutional LP' },
+    { id: `JUMP-CRYPTO`, group: 4, val: 85, type: 'CORE', label: 'Jump Crypto: High Frequency', noteType: 'Institutional MM' },
+
+    // CEX HUBS
+    { id: `Binance-${symbol}`, group: 3, val: 65, type: 'CORE', label: 'Binance (Arkham Tagged)' },
+    { id: `Coinbase-${symbol}`, group: 3, val: 60, type: 'CORE', label: 'Coinbase (Arkham Tagged)' },
+    
+    // DEX HUBS
+    { id: `Uniswap-V3-${symbol}`, group: 1, val: 70, type: 'CORE', label: `UniV3 Pool` },
+  ];
+  
   const links = [];
-  for (let i = 0; i < 12; i++) {
-    const isSuspicious = i < 4; // Increased sniper count for "math bot" identification
-    nodes.push({ id: `Wallet-${i}`, group: 2, val: 10, type: isSuspicious ? 'SNIPER' : 'RETAIL' });
-    links.push({ source: 'Funder', target: `Wallet-${i}` });
+
+  // Routing flows
+  const venues = [`Binance-${symbol}`, `Coinbase-${symbol}`, `Uniswap-V3-${symbol}`];
+  venues.forEach(venue => {
+    links.push({ source: `NQ-SWAP-SOR`, target: venue, flowValue: 1500, isRouting: true });
+  });
+
+  // Wintermute Aggregation
+  links.push({ source: `WINTERMUTE-MM`, target: `Binance-${symbol}`, flowValue: 2000, isRouting: true });
+  links.push({ source: `WINTERMUTE-MM`, target: `NQ-SWAP-SOR`, flowValue: 2500, isProtected: true });
+
+  // Wallet population
+  const walletCount = isInst ? 10 : 20;
+  for (let i = 0; i < walletCount; i++) {
+    const isWhale = isInst && Math.random() > 0.7;
+    const type = isWhale ? 'SNIPER' : 'RETAIL';
+    const val = isWhale ? 40 + Math.random() * 20 : 10 + Math.random() * 5;
+    const id = `Wallet-${symbol}-${i}`;
+    
+    nodes.push({ 
+        id, 
+        group: 2, 
+        val, 
+        type, 
+        label: isWhale ? `Arkham Whale ${i}` : `Private Wallet ${i}`,
+        noteType: isWhale ? 'Smart Money' : 'Retail'
+    });
+    
+    links.push({ source: id, target: `NQ-SWAP-SOR`, flowValue: val, isProtected: true });
   }
+
   return { nodes, links };
 };
 
-/**
- * Generates sparkline data for market cap and volume
- */
 export const generateMetricChartData = (base: number, points: number = 20) => {
   const data = [];
   let current = base;
