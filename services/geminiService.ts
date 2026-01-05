@@ -14,8 +14,8 @@ export const getMEVAnalysis = async (userMode: string, context: any) => {
       - PRICE: $${context.price}
       - MKT_CAP: $${context.marketCap?.toLocaleString() || '0'}
       - STRATEGY: ${context.strategy}
-      - RSI: ${context.technicals?.rsi.toFixed(2)}
-      - OB_IMBALANCE: ${(context.technicals?.obImbalance * 100).toFixed(2)}%
+      - RSI: ${context.technicals?.rsi?.toFixed(2) || 'N/A'}
+      - OB_IMBALANCE: ${(context.technicals?.obImbalance ? context.technicals.obImbalance * 100 : 0).toFixed(2)}%
 
       MISSION: 
       ${isInstitutional 
@@ -64,7 +64,6 @@ export const getMEVAnalysis = async (userMode: string, context: any) => {
       }
     });
     
-    // Use .text property to extract output string
     const jsonStr = response.text || "{}";
     return JSON.parse(jsonStr);
   } catch (err: any) {

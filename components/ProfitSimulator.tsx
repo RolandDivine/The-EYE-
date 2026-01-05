@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { DollarSign, Wallet, Activity, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { DollarSign, Wallet, Activity, AlertTriangle, ShieldCheck, TrendingUp, TrendingDown } from 'lucide-react';
 import { UserMode } from '../types';
 
 interface ProfitSimulatorProps {
@@ -22,7 +22,6 @@ const ProfitSimulator: React.FC<ProfitSimulatorProps> = ({ capital, onCapitalCha
   
   const probability = report?.probability_success || 0.5;
 
-  // Keep local value in sync with prop for mode switches
   useEffect(() => {
     setLocalVal(capital.toString());
   }, [capital]);
@@ -30,11 +29,9 @@ const ProfitSimulator: React.FC<ProfitSimulatorProps> = ({ capital, onCapitalCha
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setLocalVal(val);
-    
     const num = Number(val);
     if (isNaN(num)) return;
 
-    // Strict Enforcement of CQIO Bounds
     let corrected = num;
     if (isInstitutional) {
       if (num < 500000) corrected = 500000;
@@ -42,16 +39,12 @@ const ProfitSimulator: React.FC<ProfitSimulatorProps> = ({ capital, onCapitalCha
       if (num > 500000) corrected = 500000;
       if (num < 0) corrected = 0;
     }
-
-    // Delay update slightly to allow typing, but enforce bounds on blur or eventually
     onCapitalChange(corrected);
   };
 
   const handleBlur = () => {
-    // Final snap to bounds on blur
     let num = Number(localVal);
     if (isNaN(num)) num = isInstitutional ? 500000 : 5000;
-
     if (isInstitutional) {
       if (num < 500000) num = 500000;
     } else {
@@ -95,28 +88,20 @@ const ProfitSimulator: React.FC<ProfitSimulatorProps> = ({ capital, onCapitalCha
               value={localVal}
               onChange={handleInputChange}
               onBlur={handleBlur}
-              min={isInstitutional ? 500000 : 0}
-              max={isInstitutional ? undefined : 500000}
               className={`w-full bg-black border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-lg mono font-bold focus:outline-none transition-all text-white ${
                 isInstitutional ? 'focus:border-blue-600/50' : 'focus:border-red-600/50'
               }`}
             />
-            {((!isInstitutional && Number(localVal) >= 500000) || (isInstitutional && Number(localVal) <= 500000)) && (
-               <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                 {isInstitutional ? <ShieldCheck size={14} className="text-blue-500" /> : <AlertTriangle size={14} className="text-yellow-500" />}
-                 <span className="text-[8px] font-black text-gray-600 uppercase">Cap Reached</span>
-               </div>
-            )}
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
             <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-                <span className="text-[8px] text-gray-500 uppercase font-black block mb-1">Target Gain</span>
+                <span className="text-[8px] text-gray-500 uppercase font-black block mb-1">Neural Directive Gain</span>
                 <span className="text-sm font-black text-green-400 mono">+{upsidePercent.toFixed(2)}%</span>
             </div>
             <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-                <span className="text-[8px] text-gray-500 uppercase font-black block mb-1">Execution Confidence</span>
+                <span className="text-[8px] text-gray-500 uppercase font-black block mb-1">Matrix Probability</span>
                 <span className="text-sm font-black text-blue-400 mono">{(probability * 100).toFixed(0)}%</span>
             </div>
         </div>
@@ -124,19 +109,21 @@ const ProfitSimulator: React.FC<ProfitSimulatorProps> = ({ capital, onCapitalCha
         <div className="pt-6 border-t border-white/5">
           <div className="flex justify-between items-end mb-2">
             <div>
-              <span className="text-[10px] text-gray-500 uppercase font-black tracking-widest block mb-1">Net Exposure Delta</span>
+              <span className="text-[10px] text-gray-500 uppercase font-black tracking-widest block mb-1">Exposure Projection</span>
               <span className={`text-3xl mono font-black text-green-400 drop-shadow-[0_0_15px_rgba(74,222,128,0.3)]`}>
                 +${projectedProfit?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
               </span>
             </div>
             <div className="text-right">
-              <span className="text-[8px] text-gray-600 uppercase font-bold block">Terminal Return</span>
-              <span className="text-xs text-gray-400 font-bold">${(capital + projectedProfit)?.toLocaleString() || '0'}</span>
+              <span className="text-[8px] text-gray-600 uppercase font-bold block">Discovery Pulse</span>
+              <div className="flex items-center gap-1 justify-end text-emerald-500 mono font-black">
+                <TrendingUp size={12} /> Live
+              </div>
             </div>
           </div>
           <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden mt-4">
              <div 
-                className={`h-full shadow-[0_0_15px_rgba(239,68,68,0.5)] transition-all duration-1000 ${
+                className={`h-full transition-all duration-1000 ${
                    isInstitutional ? 'bg-gradient-to-r from-blue-600 to-blue-400' : 'bg-gradient-to-r from-red-600 to-red-400'
                 }`} 
                 style={{ width: `${probability * 100}%` }}
