@@ -1,41 +1,7 @@
 
 /**
- * Generates path results for a Monte Carlo simulation
+ * Generates synthetic technical analysis data with volume delta and orderbook imbalance
  */
-export const generateMonteCarloPaths = (currentPrice: number, volatility: number, steps: number = 60) => {
-  const paths = [];
-  const dt = 1 / steps;
-  let bullCount = 0;
-  
-  // Use price and volatility as a seed for more specific results
-  const assetSeed = (currentPrice * 1000) % 1000;
-  
-  for (let i = 0; i < 80; i++) { // More visual paths
-    const path = [currentPrice];
-    let price = currentPrice;
-    
-    // Vary the drift and standard deviation based on volatility
-    // Assets with high volatility will have much wilder paths
-    const drift = (Math.random() - 0.45) * 0.2; 
-    
-    for (let j = 0; j < steps; j++) {
-      const z = (Math.random() + Math.random() + Math.random() + Math.random() + Math.random() + Math.random() - 3) / 1; // Approx normal
-      const priceChange = price * (drift * dt + volatility * z * Math.sqrt(dt));
-      price += priceChange;
-      path.push(Math.max(price, currentPrice * 0.05)); // Floor at 5% of start
-    }
-    paths.push(path);
-    if (path[path.length - 1] > currentPrice) {
-      bullCount++;
-    }
-  }
-
-  const bullRatio = bullCount / paths.length;
-  const bearRatio = 1 - bullRatio;
-
-  return { paths, bullRatio, bearRatio };
-};
-
 export const generateTechnicalData = (price: number): any => {
   const rsi = 30 + Math.random() * 40;
   const ema20 = price * (1 + (Math.random() - 0.5) * 0.02);
@@ -51,7 +17,7 @@ export const generateTechnicalData = (price: number): any => {
     rsi,
     ema20,
     ema50,
-    volatility: 0.15 + Math.random() * 0.85, // Higher baseline volatility
+    volatility: 0.05 + Math.random() * 0.15,
     marketStructure,
     volDelta,
     obImbalance,
@@ -76,117 +42,122 @@ export const generateMempoolData = (baseGas: number): any[] => {
   return txs;
 };
 
+/**
+ * Generates token-specific global market topology with Arkham-style Entity Tagging
+ */
 export const generateWalletGraph = (symbol: string = 'ETH', mode: 'INSTITUTIONAL' | 'RETAIL' = 'INSTITUTIONAL') => {
   const isInst = mode === 'INSTITUTIONAL';
+  
+  const nodes = [
+    // THE NQ SWAP INSTITUTIONAL HUB
+    { id: `NQ-SWAP-SOR`, group: 5, val: 120, type: 'CORE', label: 'NQ Swap: Smart Order Router' },
 
-  interface WalletNodeData {
-    id: string;
-    group: number;
-    val: number;
-    type: string;
-    label: string;
-    behaviorNote?: string;
-  }
+    // INSTITUTIONAL MARKET MAKERS (Wintermute / Jump)
+    { id: `WINTERMUTE-MM`, group: 4, val: 90, type: 'CORE', label: 'Wintermute: Market Maker', noteType: 'Institutional LP' },
+    { id: `JUMP-CRYPTO`, group: 4, val: 85, type: 'CORE', label: 'Jump Crypto: High Frequency', noteType: 'Institutional MM' },
 
-  interface WalletLinkData {
-    source: string;
-    target: string;
-    flowValue: number;
-    isRouting?: boolean;
-    isProtected?: boolean;
-  }
-
-  const nodes: WalletNodeData[] = [
-    { id: `HUB-CORE`, group: 5, val: 140, type: 'CORE', label: isInst ? 'Retail Sentiment Hub' : 'Institutional Shadow Node' },
-    { id: `MM-1`, group: 4, val: 80, type: 'CORE', label: isInst ? 'Phantom/MetaMask Flow' : 'Market Maker Alpha' },
-    { id: `MM-2`, group: 4, val: 75, type: 'CORE', label: isInst ? 'DEX Aggregator Flow' : 'Smart Money Cluster' },
+    // CEX HUBS
+    { id: `Binance-${symbol}`, group: 3, val: 65, type: 'CORE', label: 'Binance (Arkham Tagged)' },
+    { id: `Coinbase-${symbol}`, group: 3, val: 60, type: 'CORE', label: 'Coinbase (Arkham Tagged)' },
+    
+    // DEX HUBS
+    { id: `Uniswap-V3-${symbol}`, group: 1, val: 70, type: 'CORE', label: `UniV3 Pool` },
   ];
   
-  const links: WalletLinkData[] = [];
-  nodes.forEach(n => links.push({ source: n.id, target: `HUB-CORE`, flowValue: 1000, isRouting: true }));
+  const links = [];
 
-  const count = isInst ? 40 : 25; // More nodes for institutional retail scanning
-  for (let i = 0; i < count; i++) {
-    const id = `Node-${i}`;
+  // Routing flows
+  const venues = [`Binance-${symbol}`, `Coinbase-${symbol}`, `Uniswap-V3-${symbol}`];
+  venues.forEach(venue => {
+    links.push({ source: `NQ-SWAP-SOR`, target: venue, flowValue: 1500, isRouting: true });
+  });
+
+  // Wintermute Aggregation
+  links.push({ source: `WINTERMUTE-MM`, target: `Binance-${symbol}`, flowValue: 2000, isRouting: true });
+  links.push({ source: `WINTERMUTE-MM`, target: `NQ-SWAP-SOR`, flowValue: 2500, isProtected: true });
+
+  // Wallet population
+  const walletCount = isInst ? 10 : 20;
+  for (let i = 0; i < walletCount; i++) {
+    const isWhale = isInst && Math.random() > 0.7;
+    const type = isWhale ? 'SNIPER' : 'RETAIL';
+    const val = isWhale ? 40 + Math.random() * 20 : 10 + Math.random() * 5;
+    const id = `Wallet-${symbol}-${i}`;
+    
     nodes.push({ 
-      id, 
-      group: 2, 
-      val: 10 + Math.random() * 30, 
-      type: isInst ? 'RETAIL' : 'INST', 
-      label: isInst ? `Retail Wallet ${i}` : `Inst Liquidator ${i}`,
-      behaviorNote: isInst ? 'Panic-buy signal detected.' : 'Accumulation proxy detected.'
+        id, 
+        group: 2, 
+        val, 
+        type, 
+        label: isWhale ? `Arkham Whale ${i}` : `Private Wallet ${i}`,
+        noteType: isWhale ? 'Smart Money' : 'Retail'
     });
-    links.push({ source: id, target: `HUB-CORE`, flowValue: 10, isProtected: !isInst });
+    
+    links.push({ source: id, target: `NQ-SWAP-SOR`, flowValue: val, isProtected: true });
   }
 
   return { nodes, links };
 };
 
-/**
- * Calculates Gramian Angular Field (GAF) matrix
- */
+export const generateMetricChartData = (base: number, points: number = 20) => {
+  const data = [];
+  let current = base;
+  for (let i = 0; i < points; i++) {
+    current = current * (1 + (Math.random() - 0.48) * 0.05);
+    data.push(current);
+  }
+  return data;
+};
+
 export const calculateGAF = (data: number[]): number[][] => {
   const n = data.length;
   if (n === 0) return [];
-  
-  // Rescale to [-1, 1]
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = (max - min) || 1;
-  const normalized = data.map(x => (2 * (x - min) / range) - 1);
-  
+  const scaled = data.map(x => (2 * (x - min) / range) - 1);
   const matrix: number[][] = [];
   for (let i = 0; i < n; i++) {
-    const row: number[] = [];
+    matrix[i] = [];
     for (let j = 0; j < n; j++) {
-      // GASF: cos(phi_i + phi_j) = x_i * x_j - sqrt(1 - x_i^2) * sqrt(1 - x_j^2)
-      const xi = normalized[i];
-      const xj = normalized[j];
-      const val = xi * xj - Math.sqrt(Math.max(0, 1 - xi * xi)) * Math.sqrt(Math.max(0, 1 - xj * xj));
-      row.push(val);
+      const xi = Math.max(-1, Math.min(1, scaled[i]));
+      const xj = Math.max(-1, Math.min(1, scaled[j]));
+      const val = xi * xj - Math.sqrt(1 - xi ** 2) * Math.sqrt(1 - xj ** 2);
+      matrix[i][j] = val;
     }
-    matrix.push(row);
   }
   return matrix;
 };
 
-/**
- * Calculates Markov Transition Field (MTF) matrix
- */
 export const calculateMTF = (data: number[]): number[][] => {
   const n = data.length;
   if (n === 0) return [];
-  
-  // Discretize into bins
-  const q = 8;
+  const numBins = 10;
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = (max - min) || 1;
-  
-  const bins = data.map(x => Math.min(q - 1, Math.floor(((x - min) / range) * q)));
-  
-  // Transition matrix
-  const W = Array.from({ length: q }, () => new Array(q).fill(0));
+  const bins = data.map(x => {
+    const b = Math.floor(((x - min) / range) * numBins);
+    return Math.min(b, numBins - 1);
+  });
+  const transitionMatrix = Array.from({ length: numBins }, () => new Array(numBins).fill(0));
   for (let i = 0; i < n - 1; i++) {
-    W[bins[i]][bins[i + 1]]++;
+    transitionMatrix[bins[i]][bins[i + 1]]++;
   }
-  
-  // Normalize transition matrix
-  for (let i = 0; i < q; i++) {
-    const rowSum = W[i].reduce((a, b) => a + b, 0) || 1;
-    for (let j = 0; j < q; j++) {
-      W[i][j] /= rowSum;
+  for (let i = 0; i < numBins; i++) {
+    const sum = transitionMatrix[i].reduce((a, b) => a + b, 0);
+    if (sum > 0) {
+      for (let j = 0; j < numBins; j++) {
+        transitionMatrix[i][j] /= sum;
+      }
     }
   }
-  
-  // Build MTF matrix
-  const matrix: number[][] = [];
+  const mtf: number[][] = [];
   for (let i = 0; i < n; i++) {
-    const row: number[] = [];
+    mtf[i] = [];
     for (let j = 0; j < n; j++) {
-      row.push(W[bins[i]][bins[j]]);
+      mtf[i][j] = transitionMatrix[bins[i]][bins[j]];
     }
-    matrix.push(row);
   }
-  return matrix;
+  return mtf;
 };

@@ -20,6 +20,39 @@ const VENUE_URLS: Record<ExecutionVenue, string> = {
   UNISWAP_V4: 'https://app.uniswap.org'
 };
 
+const VenueLogo = ({ id }: { id: ExecutionVenue }) => {
+  switch (id) {
+    case 'BINANCE':
+      return (
+        <svg viewBox="0 0 24 24" fill="currentColor" className="text-[#FCD535] w-full h-full p-2">
+          <path d="M12 3l-2.5 2.5 2.5 2.5 2.5-2.5L12 3zm-5 5l-2.5 2.5 2.5 2.5 2.5-2.5L7 8zm10 0l-2.5 2.5 2.5 2.5 2.5-2.5L17 8zm-5 5l-2.5 2.5 2.5 2.5 2.5-2.5L12 13zm0 5l-2.5 2.5 2.5 2.5 2.5-2.5L12 18z" />
+        </svg>
+      );
+    case 'UNISWAP_V4':
+      return (
+        <svg viewBox="0 0 24 24" fill="currentColor" className="text-[#FF007A] w-full h-full p-1.5">
+          <path d="M19.5 5c-3 0-4 3-6 5 2-5 0-7-2-7s-3 .5-4 3c-1 2.5 1 4 2 6 0 0-4 2-5 6 0 0-1.5 3 0 5s4 1 8 0 4-5 4-5l1-6c0-4-3-7-3-7z" />
+        </svg>
+      );
+    case 'NQ_SWAP':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-indigo-400 w-full h-full p-2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          <path d="M12 8v8" />
+          <path d="M8 12l4 4 4-4" />
+        </svg>
+      );
+    case 'BYBIT':
+        return (
+            <svg viewBox="0 0 24 24" fill="currentColor" className="text-white w-full h-full p-2">
+                <path d="M19 4h-4L4 16h4l11-12zm-8 16h4l7-8h-4l-7 8z"/>
+            </svg>
+        );
+    default:
+      return <Activity className="text-gray-400 w-full h-full p-2" />;
+  }
+};
+
 const ExecutionModal: React.FC<ExecutionModalProps> = ({ isOpen, onClose, token, userMode, lang }) => {
   const [view, setView] = useState<'TYPE_SELECT' | 'FIAT_FLOW' | 'CRYPTO_FLOW' | 'PENDING' | 'SUCCESS'>('TYPE_SELECT');
   const [isRouting, setIsRouting] = useState(false);
@@ -60,13 +93,13 @@ const ExecutionModal: React.FC<ExecutionModalProps> = ({ isOpen, onClose, token,
   const RenderVenue = ({ id, name, type, badge, best }: { id: ExecutionVenue, name: string, type: string, badge?: string, best?: boolean }) => (
     <button 
       onClick={() => handleExternalRedirect(id)}
-      className={`w-full group p-5 rounded-[24px] border transition-all flex items-center justify-between mb-3 ${
+      className={`w-full group p-4 rounded-[24px] border transition-all flex items-center justify-between mb-3 ${
         best ? 'bg-indigo-600/10 border-indigo-500/40' : 'bg-white/5 border-white/10 hover:border-white/20'
       }`}
     >
       <div className="flex items-center gap-4">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${best ? 'bg-indigo-600' : 'bg-white/10'}`}>
-          {best ? <Shield size={20} className="text-white" /> : <LinkIcon size={18} className="text-gray-400" />}
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden border border-white/5 ${best ? 'bg-indigo-900/20' : 'bg-black/40'}`}>
+          <VenueLogo id={id} />
         </div>
         <div className="text-left">
           <div className="flex items-center gap-2">
@@ -176,6 +209,7 @@ const ExecutionModal: React.FC<ExecutionModalProps> = ({ isOpen, onClose, token,
               <RenderVenue id="ASTER_DEX" name="AsterDEX" type="Atomic Node" />
               <RenderVenue id="BINANCE" name="Binance Terminal" type="Global CEX" />
               <RenderVenue id="UNISWAP_V4" name="Uniswap V4" type="DeFi Core" />
+              <RenderVenue id="BYBIT" name="Bybit Pro" type="Perpetual Node" />
             </div>
           )}
 

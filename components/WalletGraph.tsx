@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Share2, Zap, AlertTriangle, Target, Box, Info, ArrowRightLeft, MousePointer2, Globe, Shield, RefreshCw, Layers, ZapOff, Activity, Navigation } from 'lucide-react';
+import { Share2, Zap, AlertTriangle, Target, Box, Info, ArrowRightLeft, MousePointer2, Globe, Shield, RefreshCw, Layers, ZapOff, Activity, Navigation, Copy, Check } from 'lucide-react';
 import * as d3 from 'd3';
 
 interface WalletNode extends d3.SimulationNodeDatum {
@@ -37,6 +37,7 @@ const WalletGraph: React.FC<WalletGraphProps> = ({ data }) => {
   const [hoveredNode, setHoveredNode] = useState<WalletNode | null>(null);
   const [selectedNode, setSelectedNode] = useState<WalletNode | null>(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, k: 0.75 });
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!data || !containerRef.current || !svgRef.current) return;
@@ -121,6 +122,14 @@ const WalletGraph: React.FC<WalletGraphProps> = ({ data }) => {
     else setSelectedNode(node);
   };
 
+  const copyAddress = (id: string) => {
+      // Simulate an address for the demo
+      const simulatedAddress = `0x${Math.random().toString(16).substr(2, 40)}`;
+      navigator.clipboard.writeText(simulatedAddress);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div className="h-full w-full relative overflow-hidden bg-[#030303] rounded-[32px] border border-white/5 flex flex-col" ref={containerRef}>
       
@@ -167,7 +176,6 @@ const WalletGraph: React.FC<WalletGraphProps> = ({ data }) => {
               <stop offset="100%" stopColor="rgba(99, 102, 241, 0)" />
             </linearGradient>
             
-            {/* Symbol Paths for Icons */}
             <symbol id="icon-shield" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </symbol>
@@ -198,7 +206,6 @@ const WalletGraph: React.FC<WalletGraphProps> = ({ data }) => {
                   className="transition-all duration-300"
                 />
                 
-                {/* Flow Group with Animation */}
                 <g className="animate-flow-group">
                   <animateMotion
                     dur={`${1.5 + (isActive ? -0.5 : 0.5) + Math.random() * 2}s`}
@@ -206,14 +213,12 @@ const WalletGraph: React.FC<WalletGraphProps> = ({ data }) => {
                     path={`M ${s.x},${s.y} L ${t.x},${t.y}`}
                   />
                   
-                  {/* The Particle */}
                   <circle 
                     r={link.isProtected ? (isHighlighted ? "3" : "2.2") : (isHighlighted ? "2" : "1.2")} 
                     fill={link.isProtected ? "#818cf8" : "rgba(255,255,255,0.4)"}
                     className="shadow-lg"
                   />
                   
-                  {/* Subtle Icon next to particle */}
                   {isHighlighted && (
                     <g transform="translate(6, -6)">
                       {link.isProtected ? (
@@ -272,15 +277,18 @@ const WalletGraph: React.FC<WalletGraphProps> = ({ data }) => {
                 </div>
 
                 {(isHovered || isSelected) && (
-                  <div className="absolute top-1/2 left-full ml-10 -translate-y-1/2 bg-[#0a0a0a]/95 border border-white/10 p-6 rounded-[32px] shadow-2xl backdrop-blur-3xl z-[300] min-w-[260px] pointer-events-none animate-pop-in">
+                  <div className="absolute top-1/2 left-full ml-10 -translate-y-1/2 bg-[#0a0a0a]/95 border border-white/10 p-6 rounded-[32px] shadow-2xl backdrop-blur-3xl z-[300] min-w-[260px] pointer-events-auto animate-pop-in">
                     <div className="flex items-center gap-4 mb-5 pb-3 border-b border-white/5">
                        <div className={`p-2 rounded-xl ${isNQ ? 'bg-indigo-600 shadow-[0_0_15px_rgba(79,70,229,0.4)]' : 'bg-gray-800'}`}>
                          {isNQ ? <Shield size={16} /> : node.type === 'SNIPER' ? <ZapOff size={16} /> : <Layers size={16} />}
                        </div>
-                       <div>
+                       <div className="flex-1">
                         <span className="text-[12px] font-black text-white uppercase tracking-widest block mb-0.5">{node.label}</span>
                         <span className="text-[9px] font-black text-indigo-400 uppercase tracking-tighter">{node.noteType}</span>
                        </div>
+                       <button onClick={(e) => { e.stopPropagation(); copyAddress(node.id); }} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-gray-500 hover:text-white">
+                           {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                       </button>
                     </div>
                     
                     <div className="space-y-4">
