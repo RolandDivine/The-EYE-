@@ -1,10 +1,26 @@
 
 export enum ViewState {
-  MEMPOOL = 'MEMPOOL',
   TOPOGRAPHY = 'TOPOGRAPHY',
   GRAPH = 'GRAPH',
   TECHNICAL = 'TECHNICAL',
-  MARKET_SURFACE = 'MARKET_SURFACE'
+  MARKET_SURFACE = 'MARKET_SURFACE',
+  ALPHA_FORGE = 'ALPHA_FORGE'
+}
+
+export enum MarketRegime {
+  MEAN_REVERSION = 'MEAN_REVERSION',
+  MOMENTUM = 'MOMENTUM',
+  VOLATILITY_CRUSH = 'VOLATILITY_CRUSH',
+  LIQUIDITY_DRAIN = 'LIQUIDITY_DRAIN'
+}
+
+export interface AlphaFactor {
+  id: string;
+  name: string;
+  logic: string;
+  personality: 'AGGRESSIVE' | 'BALANCED' | 'CONSERVATIVE';
+  regimeSuitability: MarketRegime[];
+  expectedSharpe: number;
 }
 
 export enum UserMode {
