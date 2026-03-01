@@ -7,11 +7,18 @@ import {
   Binary, Grid, Layers, Rocket, Target, ChevronRight, X,
   Network, ArrowRightLeft, MousePointer2, Globe, Database, ListFilter,
   ArrowUpRight, ArrowDownRight, Eye, Hash, Server, Clock, ShieldCheck,
-  Languages, Lock, Key, CheckCircle, PieChart, Coins, CandlestickChart
+  Languages, Lock, Key, CheckCircle, PieChart, Coins, CandlestickChart,
+  BrainCircuit
 } from 'lucide-react';
 import { ViewState, UserMode, TokenData, IntelligenceMetric, EntityTransfer, Language } from './types';
 import { translations } from './translations';
-import { generateMempoolData, generateWalletGraph, generateTechnicalData } from './utils/math';
+import { 
+  generateWalletGraph, 
+  generateTechnicalData,
+  calculateKylesLambda,
+  detectMarketRegime,
+  calculateMarketTemperature
+} from './utils/math';
 import { getMEVAnalysis } from './services/geminiService';
 import { fetchTokenByAddress, fetchTopMarkets, EnhancedTokenData } from './services/coingeckoService';
 import ProfitSimulator from './components/ProfitSimulator';
@@ -19,7 +26,9 @@ import RetinaDisplay from './components/RetinaDisplay';
 import WalletGraph from './components/WalletGraph';
 import OrderFlow3D from './components/OrderFlow3D';
 import ExecutionModal from './components/ExecutionModal';
-import MempoolVisualizer from './components/MempoolVisualizer';
+import AlphaForge from './components/AlphaForge';
+import MarketIntelligence from './components/MarketIntelligence';
+import EntropyCharts from './components/EntropyCharts';
 
 const INSTITUTIONS = [
   'Wintermute', 'Jump Crypto', 'Amber Group', 'Cumberland', 
@@ -48,12 +57,16 @@ const App: React.FC = () => {
   const [report, setReport] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [techData, setTechData] = useState<any>(null);
-  const [mempool, setMempool] = useState<any[]>([]);
   const [walletData, setWalletData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [transfers, setTransfers] = useState<EntityTransfer[]>([]);
   const [selectedTransfer, setSelectedTransfer] = useState<any>(null);
   const [capital, setCapital] = useState(5000);
+  
+  // Quantitative Intelligence State
+  const [marketRegime, setMarketRegime] = useState<string>('MEAN_REVERSION');
+  const [kylesLambda, setKylesLambda] = useState<number>(0);
+  const [marketTemp, setMarketTemp] = useState<number>(0);
   
   // Retail Trading Mode
   const [retailTradingMode, setRetailTradingMode] = useState<'SPOT' | 'FUTURES'>('SPOT');
@@ -98,8 +111,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setMempool(generateMempoolData(35));
-      
       if (currentToken) {
         if (userMode === UserMode.INSTITUTIONAL) {
           // Institutional Feed
@@ -150,8 +161,15 @@ const App: React.FC = () => {
 
   const handleTokenSelect = (token: TokenData) => {
     setCurrentToken(token as EnhancedTokenData);
-    setTechData(generateTechnicalData(token.priceUsd));
+    const tech = generateTechnicalData(token.priceUsd);
+    setTechData(tech);
     setReport(null);
+    
+    // Update Quantitative Metrics
+    setMarketRegime(detectMarketRegime(tech.rsi, tech.volatility, token.priceChange24h));
+    setKylesLambda(calculateKylesLambda(tech.volatility, token.volume24h));
+    setMarketTemp(calculateMarketTemperature(tech.volatility, tech.obImbalance));
+
     if (userMode === UserMode.INSTITUTIONAL && activeView === ViewState.MARKET_SURFACE) {
       setActiveView(ViewState.TECHNICAL);
     }
@@ -287,11 +305,11 @@ const App: React.FC = () => {
             <Network size={22}/>
           </button>
           <button 
-            onClick={() => setActiveView(ViewState.MEMPOOL)} 
-            className={`p-4 transition-all ${activeView === ViewState.MEMPOOL ? 'text-blue-400' : 'text-gray-600 hover:text-white'}`}
-            title="Mempool Scanner"
+            onClick={() => setActiveView(ViewState.ALPHA_FORGE)} 
+            className={`p-4 transition-all ${activeView === ViewState.ALPHA_FORGE ? 'text-emerald-400' : 'text-gray-600 hover:text-white'}`}
+            title={t.nav_forge}
           >
-            <Zap size={22}/>
+            <BrainCircuit size={22}/>
           </button>
         </div>
       </nav>
@@ -336,7 +354,19 @@ const App: React.FC = () => {
                     {currentToken.symbol} / USD
                     {currentToken.chain && <span className="ml-2 text-blue-500 px-1.5 py-0.5 bg-blue-500/10 rounded uppercase">{currentToken.chain}</span>}
                   </div>
-                  <div className="text-xl font-black mono text-green-400">${formatPrice(currentToken.priceUsd)}</div>
+                  <div className="text-xl font-black mono text-green-400 flex items-center gap-3 justify-end">
+                    <div className="flex flex-col items-end">
+                      <span className={`text-[8px] font-black px-1.5 py-0.5 rounded mb-1 ${
+                        marketRegime === 'MOMENTUM' ? 'bg-orange-500/20 text-orange-400' :
+                        marketRegime === 'MEAN_REVERSION' ? 'bg-emerald-500/20 text-emerald-400' :
+                        marketRegime === 'VOLATILITY_CRUSH' ? 'bg-red-500/20 text-red-400' :
+                        'bg-zinc-800 text-zinc-500'
+                      }`}>
+                        {marketRegime.replace('_', ' ')}
+                      </span>
+                      <span>${formatPrice(currentToken.priceUsd)}</span>
+                    </div>
+                  </div>
                 </div>
                 <img src={currentToken.image} className="w-10 h-10 rounded-full border border-white/10" />
               </div>
@@ -351,11 +381,13 @@ const App: React.FC = () => {
             
             {/* INTELLIGENCE BAR */}
             {currentToken && (
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-6 gap-4">
                  {[
                    { label: 'Asset Sector', value: currentToken.sector || 'DeFi', icon: <Grid size={12}/>, source: 'MESSARI' },
                    { label: 'Volatility Index', value: `${(currentToken.volatility || 0.5).toFixed(2)}σ`, icon: <Activity size={12}/>, source: 'MESSARI' },
                    { label: 'Market Dominance', value: `${(currentToken.dominance || 0).toFixed(2)}%`, icon: <PieChart size={12}/>, source: 'MESSARI' },
+                   { label: 'Price Impact (λ)', value: `${kylesLambda.toFixed(4)}`, icon: <Waves size={12}/>, source: 'KYLE_MODEL' },
+                   { label: 'Market Temp', value: `${marketTemp.toFixed(1)}°`, icon: <Zap size={12}/>, source: 'FISHER_INFO' },
                    { label: 'MM Activity', value: currentToken.mktMakerActivity || 'HIGH', icon: <Database size={12}/>, source: 'WINTERMUTE' }
                  ].map((metric, i) => (
                    <div key={i} className="bg-[#0a0a0a] border border-white/5 p-4 rounded-2xl flex flex-col gap-2 group hover:border-indigo-500/30 transition-all">
@@ -437,7 +469,7 @@ const App: React.FC = () => {
             {activeView === ViewState.TECHNICAL && (
               <div className="flex flex-col gap-8 h-full">
                 <div className="grid grid-cols-2 gap-8 h-[500px]">
-                  <RetinaDisplay data={mempool.map(t => t.gasPrice)} type="GAF" />
+                  <RetinaDisplay data={techData ? [techData.volatility, techData.rsi] : []} type="GAF" />
                   <OrderFlow3D price={currentToken?.priceUsd || 100} symbol={currentToken?.symbol || 'ETH'} />
                 </div>
 
@@ -459,23 +491,45 @@ const App: React.FC = () => {
             )}
 
             {activeView === ViewState.GRAPH && (
-              <div className="h-[650px] bg-[#0a0a0a] rounded-[32px] border border-white/5 overflow-hidden shadow-2xl flex flex-col relative">
-                 <div className="p-6 border-b border-white/5 flex justify-between items-center bg-black/40 z-20">
-                   <div className="flex flex-col gap-1">
-                    <h2 className="text-[11px] font-black uppercase tracking-[0.2em] flex items-center gap-3 text-blue-500">
-                      <Network size={16}/> {userMode === UserMode.INSTITUTIONAL ? "Arkham Entity Topology" : "Social Alpha Graph"}
-                    </h2>
-                    <span className="text-[8px] text-gray-500 mono uppercase">Flow Data Aggregator</span>
+              <div className="flex flex-col gap-8 h-full overflow-y-auto scrollbar-hide">
+                <div className="h-[600px] bg-[#0a0a0a] rounded-[32px] border border-white/5 overflow-hidden shadow-2xl flex flex-col relative shrink-0">
+                   <div className="p-6 border-b border-white/5 flex justify-between items-center bg-black/40 z-20">
+                     <div className="flex flex-col gap-1">
+                      <h2 className="text-[11px] font-black uppercase tracking-[0.2em] flex items-center gap-3 text-blue-500">
+                        <Network size={16}/> {userMode === UserMode.INSTITUTIONAL ? "Arkham Entity Topology" : "Social Alpha Graph"}
+                      </h2>
+                      <span className="text-[8px] text-gray-500 mono uppercase">Flow Data Aggregator</span>
+                     </div>
                    </div>
-                 </div>
-                 <div className="flex-1">
-                    <WalletGraph data={walletData} />
-                 </div>
+                   <div className="flex-1">
+                      <WalletGraph data={walletData} />
+                   </div>
+                </div>
+                
+                <div className="bg-[#0a0a0a] rounded-[32px] border border-white/5 overflow-hidden shadow-2xl flex flex-col shrink-0">
+                  <div className="p-6 border-b border-white/5 bg-black/40">
+                    <h2 className="text-[11px] font-black uppercase tracking-[0.2em] flex items-center gap-3 text-emerald-500">
+                      <BarChart3 size={16}/> Entropy & Concentration Metrics
+                    </h2>
+                  </div>
+                  <EntropyCharts 
+                    symbol={currentToken?.symbol || 'ETH'} 
+                    price={currentToken?.priceUsd || 0} 
+                  />
+                </div>
               </div>
             )}
 
-            {activeView === ViewState.MEMPOOL && (
-               <MempoolVisualizer data={mempool} />
+            {activeView === ViewState.ALPHA_FORGE && (
+              <div className="bg-[#0a0a0a] rounded-[32px] border border-white/5 overflow-hidden flex flex-col min-h-[650px] shadow-2xl">
+                <AlphaForge 
+                  currentToken={currentToken} 
+                  onFactorGenerated={(factor) => {
+                    console.log("Factor Generated:", factor);
+                    // Could potentially integrate with backtester here
+                  }} 
+                />
+              </div>
             )}
           </div>
 
@@ -575,6 +629,12 @@ const App: React.FC = () => {
                )}
             </div>
 
+            <MarketIntelligence 
+              temperature={marketTemp} 
+              regime={marketRegime} 
+              lambda={kylesLambda} 
+            />
+
             <div className={`rounded-[56px] border ${userMode === UserMode.INSTITUTIONAL ? 'bg-[#0f0f0f] border-blue-900/20' : 'bg-[#120a0a] border-red-900/20'} p-10 shadow-2xl flex flex-col min-h-[500px] relative overflow-hidden group transition-all duration-700`}>
                <div className="absolute -top-32 -right-32 w-80 h-80 bg-blue-600/5 blur-[100px] rounded-full" />
                <div className="flex flex-col gap-6 mb-8 z-10">
@@ -660,6 +720,8 @@ const App: React.FC = () => {
               report={report} 
               currentPrice={currentToken?.priceUsd || 0} 
               strategy={userMode} 
+              marketRegime={marketRegime}
+              kylesLambda={kylesLambda}
             />
           </div>
         </div>

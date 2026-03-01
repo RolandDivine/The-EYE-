@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { DollarSign, Wallet, Activity, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { DollarSign, Wallet, Activity, AlertTriangle, ShieldCheck, Timer, BarChart3, TrendingDown, Waves } from 'lucide-react';
 import { UserMode } from '../types';
 
 interface ProfitSimulatorProps {
@@ -9,10 +9,21 @@ interface ProfitSimulatorProps {
   report: any;
   currentPrice: number;
   strategy: UserMode;
+  marketRegime?: string;
+  kylesLambda?: number;
 }
 
-const ProfitSimulator: React.FC<ProfitSimulatorProps> = ({ capital, onCapitalChange, report, currentPrice, strategy }) => {
+const ProfitSimulator: React.FC<ProfitSimulatorProps> = ({ 
+  capital, 
+  onCapitalChange, 
+  report, 
+  currentPrice, 
+  strategy,
+  marketRegime = 'MEAN_REVERSION',
+  kylesLambda = 0.01
+}) => {
   const [localVal, setLocalVal] = useState(capital.toString());
+  const [isLiquidationMode, setIsLiquidationMode] = useState(false);
   const isInstitutional = strategy === UserMode.INSTITUTIONAL;
   
   const entry = report?.entry_price || currentPrice;
@@ -21,6 +32,27 @@ const ProfitSimulator: React.FC<ProfitSimulatorProps> = ({ capital, onCapitalCha
   const projectedProfit = (capital * (upsidePercent / 100));
   
   const probability = report?.probability_success || 0.5;
+
+  // Optimal Liquidation Logic (Doc 1 & 2)
+  const calculateLiquidationMetrics = () => {
+    const lambda = kylesLambda || 0.01;
+    // Estimated slippage based on Kyle's Lambda and size
+    const estimatedSlippage = (capital / 1000000) * lambda * 100;
+    
+    // Optimal duration (in hours) based on regime
+    let optimalDuration = 1;
+    if (marketRegime === 'VOLATILITY_CRUSH') optimalDuration = 12;
+    if (marketRegime === 'LIQUIDITY_DRAIN') optimalDuration = 24;
+    if (marketRegime === 'MOMENTUM') optimalDuration = 0.5; // Exit fast in momentum
+
+    return {
+      slippage: estimatedSlippage,
+      duration: optimalDuration,
+      netProfit: projectedProfit - (capital * (estimatedSlippage / 100))
+    };
+  };
+
+  const liqMetrics = calculateLiquidationMetrics();
 
   // Keep local value in sync with prop for mode switches
   useEffect(() => {
@@ -70,50 +102,93 @@ const ProfitSimulator: React.FC<ProfitSimulatorProps> = ({ capital, onCapitalCha
       
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-red-500/10 rounded-xl text-red-500">
-            <Wallet size={20} />
+          <div className={`p-2 rounded-xl transition-colors ${isLiquidationMode ? 'bg-orange-500/10 text-orange-500' : 'bg-red-500/10 text-red-500'}`}>
+            {isLiquidationMode ? <TrendingDown size={20} /> : <Wallet size={20} />}
           </div>
-          <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-gray-400">Profit Projection</h3>
+          <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-gray-400">
+            {isLiquidationMode ? 'Liquidation Planner' : 'Profit Projection'}
+          </h3>
         </div>
-        <div className={`px-3 py-1 border rounded-full ${isInstitutional ? 'bg-blue-500/10 border-blue-500/30 text-blue-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`}>
-          <span className="text-[9px] font-black mono uppercase tracking-widest">{strategy}</span>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setIsLiquidationMode(!isLiquidationMode)}
+            className={`px-3 py-1 text-[8px] font-black uppercase tracking-widest rounded-full border transition-all ${
+              isLiquidationMode ? 'bg-orange-500/20 border-orange-500/50 text-orange-400' : 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-white'
+            }`}
+          >
+            {isLiquidationMode ? 'LIQUIDATION ACTIVE' : 'PLAN EXIT'}
+          </button>
+          <div className={`px-3 py-1 border rounded-full ${isInstitutional ? 'bg-blue-500/10 border-blue-500/30 text-blue-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`}>
+            <span className="text-[9px] font-black mono uppercase tracking-widest">{strategy}</span>
+          </div>
         </div>
       </div>
 
       <div className="space-y-6 relative z-10">
-        <div>
-          <div className="flex justify-between items-center mb-3">
-             <label className="text-[9px] text-gray-500 uppercase mono font-black tracking-widest">Allocation (USD)</label>
-             <span className="text-[8px] text-gray-600 font-bold uppercase">
-               {isInstitutional ? 'Limit: Min $500,000' : 'Limit: Max $500,000'}
-             </span>
+        {isLiquidationMode ? (
+          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-orange-500/5 p-4 rounded-2xl border border-orange-500/20">
+                <span className="text-[8px] text-orange-500 uppercase font-black block mb-1 flex items-center gap-1">
+                  <Waves size={10}/> Est. Slippage (λ)
+                </span>
+                <span className="text-sm font-black text-white mono">{liqMetrics.slippage.toFixed(3)}%</span>
+              </div>
+              <div className="bg-orange-500/5 p-4 rounded-2xl border border-orange-500/20">
+                <span className="text-[8px] text-orange-500 uppercase font-black block mb-1 flex items-center gap-1">
+                  <Timer size={10}/> Optimal Duration
+                </span>
+                <span className="text-sm font-black text-white mono">{liqMetrics.duration} Hours</span>
+              </div>
+            </div>
+            <div className="p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800">
+              <p className="text-[9px] text-zinc-500 uppercase font-bold mb-2">Regime Strategy</p>
+              <p className="text-xs text-zinc-300 italic leading-relaxed">
+                {marketRegime === 'MOMENTUM' ? "High momentum detected. Execute aggressive TWAP to minimize opportunity cost." :
+                 marketRegime === 'VOLATILITY_CRUSH' ? "Volatility spike. Use passive limit orders to capture spread and minimize impact." :
+                 "Low liquidity regime. Fragment execution over extended horizon to avoid λ-induced slippage."}
+              </p>
+            </div>
           </div>
-          <div className="relative">
-            <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-            <input 
-              type="number"
-              value={localVal}
-              onChange={handleInputChange}
-              onBlur={handleBlur}
-              min={isInstitutional ? 500000 : 0}
-              max={isInstitutional ? undefined : 500000}
-              className={`w-full bg-black border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-lg mono font-bold focus:outline-none transition-all text-white ${
-                isInstitutional ? 'focus:border-blue-600/50' : 'focus:border-red-600/50'
-              }`}
-            />
-            {((!isInstitutional && Number(localVal) >= 500000) || (isInstitutional && Number(localVal) <= 500000)) && (
-               <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                 {isInstitutional ? <ShieldCheck size={14} className="text-blue-500" /> : <AlertTriangle size={14} className="text-yellow-500" />}
-                 <span className="text-[8px] font-black text-gray-600 uppercase">Cap Reached</span>
-               </div>
-            )}
+        ) : (
+          <div>
+            <div className="flex justify-between items-center mb-3">
+               <label className="text-[9px] text-gray-500 uppercase mono font-black tracking-widest">Allocation (USD)</label>
+               <span className="text-[8px] text-gray-600 font-bold uppercase">
+                 {isInstitutional ? 'Limit: Min $500,000' : 'Limit: Max $500,000'}
+               </span>
+            </div>
+            <div className="relative">
+              <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+              <input 
+                type="number"
+                value={localVal}
+                onChange={handleInputChange}
+                onBlur={handleBlur}
+                min={isInstitutional ? 500000 : 0}
+                max={isInstitutional ? undefined : 500000}
+                className={`w-full bg-black border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-lg mono font-bold focus:outline-none transition-all text-white ${
+                  isInstitutional ? 'focus:border-blue-600/50' : 'focus:border-red-600/50'
+                }`}
+              />
+              {((!isInstitutional && Number(localVal) >= 500000) || (isInstitutional && Number(localVal) <= 500000)) && (
+                 <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                   {isInstitutional ? <ShieldCheck size={14} className="text-blue-500" /> : <AlertTriangle size={14} className="text-yellow-500" />}
+                   <span className="text-[8px] font-black text-gray-600 uppercase">Cap Reached</span>
+                 </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
             <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-                <span className="text-[8px] text-gray-500 uppercase font-black block mb-1">Target Gain</span>
-                <span className="text-sm font-black text-green-400 mono">+{upsidePercent.toFixed(2)}%</span>
+                <span className="text-[8px] text-gray-500 uppercase font-black block mb-1">
+                  {isLiquidationMode ? 'Net Profit (Post-Impact)' : 'Target Gain'}
+                </span>
+                <span className={`text-sm font-black mono ${isLiquidationMode ? 'text-orange-400' : 'text-green-400'}`}>
+                  {isLiquidationMode ? `$${liqMetrics.netProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `+${upsidePercent.toFixed(2)}%`}
+                </span>
             </div>
             <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
                 <span className="text-[8px] text-gray-500 uppercase font-black block mb-1">Execution Confidence</span>

@@ -161,3 +161,31 @@ export const calculateMTF = (data: number[]): number[][] => {
   }
   return mtf;
 };
+
+/**
+ * Calculates Kyle's Lambda (Price Impact)
+ * λ = (Price Change) / (Net Order Flow)
+ * Higher λ means lower liquidity / higher information asymmetry
+ */
+export const calculateKylesLambda = (volatility: number, volume: number): number => {
+  // Simplified model: λ is proportional to volatility and inversely to volume
+  return (volatility * 100) / (Math.log10(volume + 1) || 1);
+};
+
+/**
+ * Detects Market Regime based on volatility and price action
+ */
+export const detectMarketRegime = (rsi: number, volatility: number, priceChange: number): string => {
+  if (volatility > 0.2) return 'VOLATILITY_CRUSH';
+  if (Math.abs(priceChange) > 5) return 'MOMENTUM';
+  if (rsi > 70 || rsi < 30) return 'MEAN_REVERSION';
+  return 'LIQUIDITY_DRAIN';
+};
+
+/**
+ * Calculates "Market Temperature" using Fisher Information concept
+ * Higher temperature indicates higher entropy/uncertainty in the price manifold
+ */
+export const calculateMarketTemperature = (volatility: number, obImbalance: number): number => {
+  return Math.min(100, (volatility * 400) + (Math.abs(obImbalance) * 50));
+};

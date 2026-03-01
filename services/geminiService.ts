@@ -78,3 +78,54 @@ export const getMEVAnalysis = async (userMode: string, tradingMode: 'SPOT' | 'FU
     throw err;
   }
 };
+
+export const generateAlphaFactor = async (prompt: string, assetContext: any) => {
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: `GENERATE ALPHA FACTOR LOGIC:
+      - USER INPUT: "${prompt}"
+      - ASSET CONTEXT: ${assetContext.token} ($${assetContext.price})
+      
+      MISSION:
+      Translate the user's trading idea into a structured "White-box" alpha factor. 
+      The logic should be quantitative and executable.
+      Identify the model personality (AGGRESSIVE, BALANCED, CONSERVATIVE) based on the risk profile of the idea.
+      Specify which market regimes this factor is best suited for.
+
+      OUTPUT_JSON_STRUCTURE:
+      {
+        "name": "Alpha Factor Name",
+        "logic": "Detailed pseudo-code or mathematical logic for the factor.",
+        "personality": "AGGRESSIVE | BALANCED | CONSERVATIVE",
+        "regimeSuitability": ["MEAN_REVERSION", "MOMENTUM", "VOLATILITY_CRUSH", "LIQUIDITY_DRAIN"],
+        "expectedSharpe": number
+      }`,
+      config: {
+        systemInstruction: "You are a Senior Quantitative Researcher. You specialize in translating qualitative trading intuition into rigorous alpha factors.",
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            logic: { type: Type.STRING },
+            personality: { type: Type.STRING },
+            regimeSuitability: { 
+              type: Type.ARRAY, 
+              items: { type: Type.STRING } 
+            },
+            expectedSharpe: { type: Type.NUMBER }
+          },
+          required: ["name", "logic", "personality", "regimeSuitability", "expectedSharpe"]
+        },
+        temperature: 0.7,
+      }
+    });
+    
+    const jsonStr = response.text || "{}";
+    return JSON.parse(jsonStr);
+  } catch (err: any) {
+    console.error("Alpha Forge Failure:", err);
+    throw err;
+  }
+};
