@@ -1,7 +1,9 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Use process.env for the platform, but fallback to import.meta.env for Vite/Vercel
+const apiKey = process.env.API_KEY || (import.meta.env && import.meta.env.VITE_GEMINI_API_KEY);
+const ai = new GoogleGenAI({ apiKey: apiKey });
 
 export const getMEVAnalysis = async (userMode: string, tradingMode: 'SPOT' | 'FUTURES', context: any) => {
   const isInstitutional = userMode === 'INSTITUTIONAL';
@@ -9,7 +11,7 @@ export const getMEVAnalysis = async (userMode: string, tradingMode: 'SPOT' | 'FU
   
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3-flash-preview',
       contents: `COMMAND INPUT [USER_MODE: ${userMode}] [TRADING_MODE: ${tradingMode}]:
       - ASSET: ${context.token}
       - PRICE: $${context.price}
@@ -68,6 +70,7 @@ export const getMEVAnalysis = async (userMode: string, tradingMode: 'SPOT' | 'FU
           propertyOrdering: ["directive", "action_title", "confidence_score", "probability_success", "entry_price", "target_exit", "stop_loss", "retina_interpretation", "retail_reasoning"]
         },
         temperature: 0.3,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }
       }
     });
     
@@ -82,7 +85,7 @@ export const getMEVAnalysis = async (userMode: string, tradingMode: 'SPOT' | 'FU
 export const generateAlphaFactor = async (prompt: string, assetContext: any) => {
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3-flash-preview',
       contents: `GENERATE ALPHA FACTOR LOGIC:
       - USER INPUT: "${prompt}"
       - ASSET CONTEXT: ${assetContext.token} ($${assetContext.price})
@@ -119,6 +122,7 @@ export const generateAlphaFactor = async (prompt: string, assetContext: any) => 
           required: ["name", "logic", "personality", "regimeSuitability", "expectedSharpe"]
         },
         temperature: 0.7,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }
       }
     });
     
