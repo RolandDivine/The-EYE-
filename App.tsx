@@ -4,11 +4,11 @@ import {
   ShieldAlert, Activity, Zap, Search, Cpu, RefreshCw, 
   TrendingUp, Map as MapIcon, Share2, BarChart3, 
   Waves, Briefcase, User, Info, AlertCircle, ShoppingCart, 
-  Binary, Grid, Layers, Rocket, Target, ChevronRight, X,
+  Binary, Grid, Layers, Rocket, Target, ChevronRight, X, Command,
   Network, ArrowRightLeft, MousePointer2, Globe, Database, ListFilter,
   ArrowUpRight, ArrowDownRight, Eye, Hash, Server, Clock, ShieldCheck,
   Languages, Lock, Key, CheckCircle, PieChart, Coins, CandlestickChart,
-  BrainCircuit
+  BrainCircuit, Sun, Moon, MessageSquare, ChevronLeft, Menu
 } from 'lucide-react';
 import { ViewState, UserMode, TokenData, IntelligenceMetric, EntityTransfer, Language } from './types';
 import { translations } from './translations';
@@ -29,6 +29,11 @@ import ExecutionModal from './components/ExecutionModal';
 import AlphaForge from './components/AlphaForge';
 import MarketIntelligence from './components/MarketIntelligence';
 import EntropyCharts from './components/EntropyCharts';
+import CommandBar from './components/CommandBar';
+import FeedbackModal from './components/FeedbackModal';
+import OnboardingTour from './components/OnboardingTour';
+import { AnimatePresence, motion } from 'motion/react';
+import debounce from 'lodash.debounce';
 
 const INSTITUTIONS = [
   'Wintermute', 'Jump Crypto', 'Amber Group', 'Cumberland', 
@@ -59,6 +64,7 @@ const App: React.FC = () => {
   const [techData, setTechData] = useState<any>(null);
   const [walletData, setWalletData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notification, setNotification] = useState<string | null>(null);
   const [transfers, setTransfers] = useState<EntityTransfer[]>([]);
   const [selectedTransfer, setSelectedTransfer] = useState<any>(null);
   const [capital, setCapital] = useState(5000);
@@ -78,8 +84,75 @@ const App: React.FC = () => {
 
   // Execution State
   const [isExecutionModalOpen, setIsExecutionModalOpen] = useState(false);
+  
+  // Command Bar & Gamification
+  const [isCommandBarOpen, setIsCommandBarOpen] = useState(false);
+  const [alphaPoints, setAlphaPoints] = useState(1250);
+  const [dailyStreak, setDailyStreak] = useState(5);
+
+  // New UI States
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+  const [runTour, setRunTour] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState('');
 
   const t = translations[lang];
+
+  // Onboarding check
+  useEffect(() => {
+    const hasSeenTour = localStorage.getItem('defi_scope_tour_seen');
+    if (!hasSeenTour) {
+      setRunTour(true);
+    }
+  }, []);
+
+  const handleTourFinish = () => {
+    setRunTour(false);
+    localStorage.setItem('defi_scope_tour_seen', 'true');
+  };
+
+  // Theme Sync
+  useEffect(() => {
+    if (theme === 'light') {
+      document.body.classList.add('light');
+    } else {
+      document.body.classList.remove('light');
+    }
+  }, [theme]);
+
+  // Debounced Global Search
+  const debouncedSearch = useRef(
+    debounce((query: string) => {
+      if (query.length > 2) {
+        handleSearch(undefined, query);
+      }
+    }, 500)
+  ).current;
+
+  useEffect(() => {
+    return () => {
+      debouncedSearch.cancel();
+    };
+  }, [debouncedSearch]);
+
+  const onGlobalSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setGlobalSearch(val);
+    debouncedSearch(val);
+  };
+
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setIsCommandBarOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Sync capital to mode constraints
   useEffect(() => {
@@ -217,15 +290,42 @@ const App: React.FC = () => {
     setIsAnalyzing(false);
   };
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery) return;
+  const handleSearch = async (e?: React.FormEvent, overrideQuery?: string) => {
+    if (e) e.preventDefault();
+    const query = overrideQuery || searchQuery;
+    if (!query) return;
     
     setIsSearching(true);
     setError(null);
     
+    // Handle special commands
+    if (query === 'gainers') {
+      setActiveView(ViewState.MARKET_SURFACE);
+      setIsSearching(false);
+      return;
+    }
+    
+    if (query === 'whales') {
+      setActiveView(ViewState.GRAPH);
+      setIsSearching(false);
+      return;
+    }
+
+    if (query === 'mempool') {
+      setActiveView(ViewState.GRAPH);
+      setIsSearching(false);
+      return;
+    }
+
+    if (query === 'audit') {
+      setNotification("Security Audit: System scanning for re-entrancy vectors... PASSED");
+      setIsSearching(false);
+      setTimeout(() => setNotification(null), 5000);
+      return;
+    }
+    
     try {
-      const data = await fetchTokenByAddress(searchQuery);
+      const data = await fetchTokenByAddress(query);
       if (data) {
         handleTokenSelect(data);
         setSearchQuery('');
@@ -245,72 +345,135 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={`min-h-screen ${userMode === UserMode.INSTITUTIONAL ? 'bg-[#050505]' : 'bg-[#080808]'} text-white flex flex-col lg:flex-row overflow-hidden font-sans transition-colors duration-1000`}>
+    <div className={`min-h-screen ${theme === 'dark' ? (userMode === UserMode.INSTITUTIONAL ? 'bg-[#050505] scanline' : 'bg-[#080808]') : 'bg-[#f8f9fa]'} ${theme === 'light' ? 'text-zinc-900' : 'text-white'} flex flex-col lg:flex-row overflow-hidden font-sans transition-colors duration-1000 relative`}>
       
+      <OnboardingTour run={runTour} onFinish={handleTourFinish} />
+      <FeedbackModal isOpen={isFeedbackModalOpen} onClose={() => setIsFeedbackModalOpen(false)} />
+
+      <CommandBar 
+        isOpen={isCommandBarOpen} 
+        onClose={() => setIsCommandBarOpen(false)} 
+        onSearch={(q) => {
+          setSearchQuery(q);
+          handleSearch(undefined, q);
+        }} 
+      />
       {/* MODE CONTROLLER SIDEBAR */}
-      <nav className="w-full lg:w-24 border-r border-white/5 bg-black/40 backdrop-blur-xl flex lg:flex-col items-center py-10 gap-8 z-50">
+      <nav 
+        id="mode-controller"
+        className={`${isSidebarCollapsed ? 'lg:w-20' : 'lg:w-64'} w-full border-r ${theme === 'dark' ? 'border-white/5 bg-black/40' : 'border-black/5 bg-white/80'} backdrop-blur-xl flex lg:flex-col items-center py-10 gap-8 z-50 transition-all duration-300 relative`}
+      >
+        <button 
+          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          className={`absolute -right-3 top-24 w-6 h-6 rounded-full border flex items-center justify-center z-[60] transition-all ${theme === 'dark' ? 'bg-zinc-900 border-white/10 text-white' : 'bg-white border-black/10 text-black'}`}
+        >
+          {isSidebarCollapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
+        </button>
+
         <div className={`p-4 rounded-2xl ${userMode === UserMode.INSTITUTIONAL ? 'bg-blue-600 shadow-[0_0_30px_rgba(37,99,235,0.4)]' : 'bg-red-600 shadow-[0_0_30px_rgba(220,38,38,0.4)]'} transition-all duration-700`}>
-          <ShieldAlert size={32} />
+          <ShieldAlert size={isSidebarCollapsed ? 24 : 32} />
         </div>
         
-        <div className="flex lg:flex-col gap-6">
+        {!isSidebarCollapsed && (
+          <div className="px-6 w-full mb-4">
+            <h1 className={`text-sm font-black uppercase tracking-[0.3em] ${theme === 'dark' ? 'text-white' : 'text-black'}`}>DeFi Scope</h1>
+            <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Visual Intelligence</p>
+          </div>
+        )}
+
+        <div className="flex lg:flex-col gap-4 w-full px-4">
           <button 
             onClick={() => trySwitchMode(UserMode.INSTITUTIONAL)}
-            className={`p-4 rounded-xl transition-all ${userMode === UserMode.INSTITUTIONAL ? 'bg-blue-600/20 text-blue-500' : 'text-gray-600 hover:text-white'}`}
+            className={`flex items-center gap-4 p-4 rounded-xl transition-all relative group w-full ${userMode === UserMode.INSTITUTIONAL ? 'bg-blue-600/20 text-blue-500' : 'text-gray-600 hover:text-white'}`}
             title="Institutional"
           >
             <Briefcase size={24} />
+            {!isSidebarCollapsed && <span className="text-xs font-black uppercase tracking-widest">Institutional</span>}
+            {userMode === UserMode.INSTITUTIONAL && <motion.div layoutId="active-mode" className="absolute inset-0 border-2 border-blue-500 rounded-xl" />}
           </button>
           <button 
             onClick={() => trySwitchMode(UserMode.RETAIL)}
-            className={`p-4 rounded-xl transition-all ${userMode === UserMode.RETAIL ? 'bg-red-600/20 text-red-500' : 'text-gray-600 hover:text-white'}`}
+            className={`flex items-center gap-4 p-4 rounded-xl transition-all relative group w-full ${userMode === UserMode.RETAIL ? 'bg-red-600/20 text-red-500' : 'text-gray-600 hover:text-white'}`}
             title="Retail"
           >
             <User size={24} />
+            {!isSidebarCollapsed && <span className="text-xs font-black uppercase tracking-widest">Retail</span>}
+            {userMode === UserMode.RETAIL && <motion.div layoutId="active-mode" className="absolute inset-0 border-2 border-red-500 rounded-xl" />}
           </button>
         </div>
 
-        <div className="mt-8 lg:mt-12 flex lg:flex-col gap-4 border-t border-white/5 pt-8">
-           {[Language.EN, Language.ZH, Language.RU].map(l => (
+        {userMode === UserMode.RETAIL && !isSidebarCollapsed && (
+          <div className="hidden lg:flex flex-col items-center gap-4 py-6 border-y border-white/5 w-full">
+            <div className="flex items-center gap-4 px-6 w-full group cursor-help" title="Alpha Points">
+              <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-500 group-hover:scale-110 transition-transform">
+                <Target size={18} />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] text-zinc-500 font-black uppercase">Alpha Points</span>
+                <span className={`text-[10px] font-black mono ${theme === 'dark' ? 'text-white' : 'text-black'}`}>{alphaPoints}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 px-6 w-full group cursor-help" title="Daily Streak">
+              <div className="p-2 bg-orange-500/10 rounded-lg text-orange-500 group-hover:scale-110 transition-transform">
+                <Zap size={18} />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] text-zinc-500 font-black uppercase">Streak</span>
+                <span className={`text-[10px] font-black mono ${theme === 'dark' ? 'text-white' : 'text-black'}`}>{dailyStreak}d</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-8 lg:mt-4 flex lg:flex-col gap-2 w-full px-4">
+           {!isSidebarCollapsed && <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest mb-2 px-2">Navigation</p>}
+           {[
+             { id: ViewState.MARKET_SURFACE, icon: <Grid size={22}/>, label: t.nav_surface },
+             { id: ViewState.TECHNICAL, icon: <Layers size={22}/>, label: t.nav_quant },
+             { id: ViewState.GRAPH, icon: <Network size={22}/>, label: t.nav_topology },
+             { id: ViewState.ALPHA_FORGE, icon: <BrainCircuit size={22}/>, label: t.nav_forge },
+             { id: 'audit', icon: <ShieldCheck size={22}/>, label: 'Security Audit' }
+           ].map(view => (
              <button 
-                key={l}
-                onClick={() => setLang(l)}
-                className={`text-[10px] font-black w-10 h-10 rounded-full flex items-center justify-center border transition-all ${lang === l ? 'bg-white/10 border-white/30 text-white' : 'border-transparent text-gray-600 hover:text-gray-400'}`}
-             >
-               {l}
-             </button>
+                key={view.id}
+                onClick={() => {
+                  if (view.id === 'audit') {
+                    handleSearch(undefined, 'audit');
+                  } else {
+                    setActiveView(view.id as ViewState);
+                  }
+                }} 
+                className={`flex items-center gap-4 p-4 rounded-xl transition-all w-full ${activeView === view.id ? 'bg-white/5 text-blue-400' : 'text-gray-600 hover:text-white'}`}
+                title={view.label}
+              >
+                {view.icon}
+                {!isSidebarCollapsed && <span className="text-[10px] font-black uppercase tracking-widest">{view.label}</span>}
+              </button>
            ))}
         </div>
 
-        <div className="mt-auto hidden lg:flex flex-col gap-6">
-          <button 
-            onClick={() => setActiveView(ViewState.MARKET_SURFACE)} 
-            className={`p-4 transition-all ${activeView === ViewState.MARKET_SURFACE ? 'text-blue-400' : 'text-gray-600 hover:text-white'}`}
-            title={t.nav_surface}
-          >
-            <Grid size={22}/>
-          </button>
-          <button 
-            onClick={() => setActiveView(ViewState.TECHNICAL)} 
-            className={`p-4 transition-all ${activeView === ViewState.TECHNICAL ? 'text-blue-400' : 'text-gray-600 hover:text-white'}`}
-            title={t.nav_quant}
-          >
-            <Layers size={22}/>
-          </button>
-          <button 
-            onClick={() => setActiveView(ViewState.GRAPH)} 
-            className={`p-4 transition-all ${activeView === ViewState.GRAPH ? 'text-blue-400' : 'text-gray-600 hover:text-white'}`}
-            title={t.nav_topology}
-          >
-            <Network size={22}/>
-          </button>
-          <button 
-            onClick={() => setActiveView(ViewState.ALPHA_FORGE)} 
-            className={`p-4 transition-all ${activeView === ViewState.ALPHA_FORGE ? 'text-emerald-400' : 'text-gray-600 hover:text-white'}`}
-            title={t.nav_forge}
-          >
-            <BrainCircuit size={22}/>
-          </button>
+        <div className="mt-auto flex lg:flex-col gap-4 w-full px-4">
+           {!isSidebarCollapsed && <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest mb-2 px-2">System</p>}
+           <div className="flex lg:flex-col gap-2">
+              {[Language.EN, Language.ZH, Language.RU].map(l => (
+                <button 
+                    key={l}
+                    onClick={() => setLang(l)}
+                    className={`text-[10px] font-black w-10 h-10 rounded-full flex items-center justify-center border transition-all ${lang === l ? 'bg-white/10 border-white/30 text-white' : 'border-transparent text-gray-600 hover:text-gray-400'}`}
+                >
+                  {l}
+                </button>
+              ))}
+           </div>
+           <button 
+             id="feedback-trigger"
+             onClick={() => setIsFeedbackModalOpen(true)}
+             className={`flex items-center gap-4 p-4 rounded-xl transition-all w-full text-gray-600 hover:text-white`}
+             title="Feedback"
+           >
+             <MessageSquare size={22} />
+             {!isSidebarCollapsed && <span className="text-[10px] font-black uppercase tracking-widest">Feedback</span>}
+           </button>
         </div>
       </nav>
 
@@ -318,35 +481,61 @@ const App: React.FC = () => {
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         
         {/* HEADER */}
-        <header className="h-20 border-b border-white/5 flex items-center px-10 justify-between bg-black/20 backdrop-blur-md">
-          <div className="flex items-center gap-6">
-            <h1 className="text-xs font-black uppercase tracking-[0.4em] text-gray-500">
-              {userMode === UserMode.INSTITUTIONAL ? t.title_inst : t.title_retail}
-            </h1>
-            <div className="flex items-center gap-4 ml-6 border-l border-white/10 pl-6">
-               <div className="flex items-center gap-2">
-                  <Database size={14} className="text-gray-600" />
-                  <span className="text-[10px] font-black uppercase text-gray-500">
-                    {userMode === UserMode.INSTITUTIONAL ? t.network_inst : t.network_retail}
-                  </span>
-               </div>
+        <header className={`h-20 border-b ${theme === 'dark' ? 'border-white/5 bg-black/20' : 'border-black/5 bg-white/80'} flex items-center px-10 justify-between backdrop-blur-md z-40`}>
+          <div className="flex items-center gap-8 flex-1">
+            <div id="global-search" className="relative flex-1 max-w-md">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
+              <input 
+                type="text"
+                value={globalSearch}
+                onChange={onGlobalSearchChange}
+                placeholder="Global Search (Assets, Commands, Alpha...)"
+                className={`w-full py-2.5 pl-12 pr-4 rounded-xl border transition-all text-xs font-bold outline-none ${theme === 'dark' ? 'bg-white/5 border-white/10 text-white focus:border-blue-500/50' : 'bg-black/5 border-black/10 text-black focus:border-blue-500/50'}`}
+              />
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1 px-1.5 py-0.5 bg-black/40 rounded border border-white/10">
+                <Command size={10} className="text-zinc-600" />
+                <span className="text-[9px] font-black text-zinc-600">K</span>
+              </div>
+            </div>
+            
+            <div className="h-8 w-px bg-white/5" />
+            
+            <div className="flex items-center gap-6">
+              <button 
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className={`p-2 rounded-xl border transition-all ${theme === 'dark' ? 'bg-white/5 border-white/10 text-yellow-400 hover:bg-white/10' : 'bg-black/5 border-black/10 text-indigo-600 hover:bg-black/10'}`}
+                title="Toggle Theme"
+              >
+                {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
+
+              <div className="flex items-center gap-6">
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Network Status</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className={`text-[10px] font-black mono ${theme === 'dark' ? 'text-white' : 'text-black'}`}>LD4_CONNECTED</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-6">
-            <form onSubmit={handleSearch} className="relative group">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                 {isSearching ? <RefreshCw size={14} className="text-blue-500 animate-spin" /> : <Search size={14} className="text-gray-500 group-focus-within:text-blue-500" />}
+            {userMode === UserMode.RETAIL && (
+              <div className={`flex items-center gap-4 px-4 py-2 border rounded-xl ${theme === 'dark' ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-500/10 border-emerald-500/30'}`}>
+                <div className="flex items-center gap-2">
+                  <Target size={14} className="text-emerald-500" />
+                  <span className={`text-[10px] font-black mono ${theme === 'dark' ? 'text-white' : 'text-black'}`}>{alphaPoints} AP</span>
+                </div>
+                <div className="w-px h-4 bg-emerald-500/20" />
+                <div className="flex items-center gap-2">
+                  <Zap size={14} className="text-orange-500" />
+                  <span className={`text-[10px] font-black mono ${theme === 'dark' ? 'text-white' : 'text-black'}`}>{dailyStreak} DAY STREAK</span>
+                </div>
               </div>
-              <input 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Contract Discovery (Multi-Chain)..." 
-                className="bg-white/5 border border-white/10 rounded-xl py-2 pl-10 pr-4 text-[11px] mono focus:border-blue-600 outline-none w-80 transition-all"
-                disabled={isSearching}
-              />
-            </form>
-
+            )}
+            
             {currentToken && (
               <div className="flex items-center gap-6 animate-fade-in">
                 <div className="text-right">
@@ -354,7 +543,7 @@ const App: React.FC = () => {
                     {currentToken.symbol} / USD
                     {currentToken.chain && <span className="ml-2 text-blue-500 px-1.5 py-0.5 bg-blue-500/10 rounded uppercase">{currentToken.chain}</span>}
                   </div>
-                  <div className="text-xl font-black mono text-green-400 flex items-center gap-3 justify-end">
+                  <div className={`text-xl font-black mono flex items-center gap-3 justify-end ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`}>
                     <div className="flex flex-col items-end">
                       <span className={`text-[8px] font-black px-1.5 py-0.5 rounded mb-1 ${
                         marketRegime === 'MOMENTUM' ? 'bg-orange-500/20 text-orange-400' :
@@ -375,7 +564,7 @@ const App: React.FC = () => {
         </header>
 
         {/* WORKSPACE CONTENT */}
-        <div className="flex-1 p-8 grid grid-cols-12 gap-8 overflow-y-auto scrollbar-hide">
+        <div className={`flex-1 p-8 grid grid-cols-12 gap-8 overflow-y-auto scrollbar-hide ${theme === 'light' ? 'bg-white/50' : ''}`}>
           
           <div className="col-span-12 lg:col-span-8 flex flex-col gap-8">
             
@@ -407,8 +596,8 @@ const App: React.FC = () => {
             )}
 
             {activeView === ViewState.MARKET_SURFACE && (
-              <div className="bg-[#0a0a0a] rounded-[32px] border border-white/5 overflow-hidden flex flex-col h-[650px] shadow-2xl">
-                 <div className="p-6 border-b border-white/5 flex justify-between items-center bg-black/40">
+              <div id="market-surface" className={`${theme === 'dark' ? 'bg-[#0a0a0a]' : 'bg-white'} rounded-[32px] border ${theme === 'dark' ? 'border-white/5' : 'border-black/5'} overflow-hidden flex flex-col h-[650px] shadow-2xl`}>
+                 <div className={`p-6 border-b ${theme === 'dark' ? 'border-white/5 bg-black/40' : 'border-black/5 bg-zinc-50'} flex justify-between items-center`}>
                    <h2 className="text-[11px] font-black uppercase tracking-[0.2em] flex items-center gap-3 text-blue-500">
                      <Binary size={16}/> {userMode === UserMode.INSTITUTIONAL ? "Institutional Liquidity Surface" : "Retail Market Pulse"}
                    </h2>
@@ -427,7 +616,7 @@ const App: React.FC = () => {
                           <th className="p-5">Sector</th>
                           <th className="p-5">Price</th>
                           <th className="p-5">24h Change</th>
-                          <th className="p-5">Vol / MM</th>
+                          <th className="p-5">{userMode === UserMode.INSTITUTIONAL ? "Smart Money Flow" : "Social Sentiment"}</th>
                           <th className="p-5 text-right">Action</th>
                         </tr>
                       </thead>
@@ -436,28 +625,51 @@ const App: React.FC = () => {
                           <tr 
                             key={token.id} 
                             onClick={() => handleTokenSelect(token)}
-                            className={`border-b border-white/5 transition-all cursor-pointer ${currentToken?.id === token.id ? 'bg-blue-600/10 border-blue-500/20' : 'hover:bg-white/5'}`}
+                            className={`border-b border-white/5 transition-all cursor-pointer group ${currentToken?.id === token.id ? 'bg-blue-600/10 border-blue-500/20' : 'hover:bg-white/5'}`}
                           >
                             <td className="p-5 flex items-center gap-4">
-                              <img src={token.image} className="w-7 h-7 rounded-full" />
-                              <div className="font-black text-white">{token.symbol}</div>
-                            </td>
-                            <td className="p-5">
-                              <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">{token.sector || 'DEFI'}</span>
-                            </td>
-                            <td className="p-5 font-bold">${formatPrice(token.priceUsd)}</td>
-                            <td className={`p-5 font-black ${(token.priceChange24h || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                              {(token.priceChange24h || 0).toFixed(2)}%
-                            </td>
-                            <td className="p-5">
-                              <div className="flex flex-col gap-1">
-                                <span className="text-[9px] text-gray-400 font-bold">{(token.volatility || 0).toFixed(2)}σ</span>
-                                <span className={`text-[7px] px-1.5 py-0.5 rounded w-fit font-black ${token.mktMakerActivity === 'HIGH' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-gray-800 text-gray-500'}`}>
-                                  {token.mktMakerActivity || 'LOW'}
-                                </span>
+                              <div className="relative">
+                                <img src={token.image} className="w-8 h-8 rounded-full border border-white/10 group-hover:border-blue-500/50 transition-all" />
+                                {token.rank && token.rank <= 10 && (
+                                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-black" />
+                                )}
+                              </div>
+                              <div>
+                                <div className="font-black text-white group-hover:text-blue-400 transition-colors">{token.symbol}</div>
+                                <div className="text-[8px] text-gray-600 font-bold uppercase tracking-tighter">{token.name}</div>
                               </div>
                             </td>
-                            <td className="p-5 text-right"><ChevronRight size={16} className="ml-auto text-gray-700" /></td>
+                            <td className="p-5">
+                              <span className="px-2 py-0.5 bg-white/5 rounded text-[9px] font-bold text-gray-500 uppercase tracking-wider">{token.sector || 'DEFI'}</span>
+                            </td>
+                            <td className="p-5 font-bold text-zinc-300">${formatPrice(token.priceUsd)}</td>
+                            <td className={`p-5 font-black ${(token.priceChange24h || 0) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                              <div className="flex items-center gap-1">
+                                {(token.priceChange24h || 0) >= 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+                                {(token.priceChange24h || 0).toFixed(2)}%
+                              </div>
+                            </td>
+                            <td className="p-5">
+                              {userMode === UserMode.INSTITUTIONAL ? (
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden max-w-[60px]">
+                                    <div className="h-full bg-blue-500" style={{ width: `${Math.random() * 100}%` }} />
+                                  </div>
+                                  <span className="text-[9px] font-black text-blue-500 uppercase">Accumulating</span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <div className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${Math.random() > 0.5 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-orange-500/10 text-orange-500'}`}>
+                                    {Math.random() > 0.5 ? 'Bullish' : 'Neutral'}
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-5 text-right">
+                              <button className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all">
+                                Inspect
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -491,7 +703,7 @@ const App: React.FC = () => {
             )}
 
             {activeView === ViewState.GRAPH && (
-              <div className="flex flex-col gap-8 h-full overflow-y-auto scrollbar-hide">
+              <div id="graph-view" className="flex flex-col gap-8 h-full overflow-y-auto scrollbar-hide">
                 <div className="h-[600px] bg-[#0a0a0a] rounded-[32px] border border-white/5 overflow-hidden shadow-2xl flex flex-col relative shrink-0">
                    <div className="p-6 border-b border-white/5 flex justify-between items-center bg-black/40 z-20">
                      <div className="flex flex-col gap-1">
@@ -521,7 +733,7 @@ const App: React.FC = () => {
             )}
 
             {activeView === ViewState.ALPHA_FORGE && (
-              <div className="bg-[#0a0a0a] rounded-[32px] border border-white/5 overflow-hidden flex flex-col min-h-[650px] shadow-2xl">
+              <div id="alpha-forge" className={`${theme === 'dark' ? 'bg-[#0a0a0a]' : 'bg-white'} rounded-[32px] border ${theme === 'dark' ? 'border-white/5' : 'border-black/5'} overflow-hidden flex flex-col min-h-[650px] shadow-2xl`}>
                 <AlphaForge 
                   currentToken={currentToken} 
                   onFactorGenerated={(factor) => {
@@ -773,6 +985,14 @@ const App: React.FC = () => {
           <AlertCircle size={24} />
           <span className="text-[10px] font-black uppercase tracking-widest">{error}</span>
           <button onClick={() => setError(null)}><X size={20}/></button>
+        </div>
+      )}
+
+      {notification && (
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-10 py-5 rounded-full shadow-2xl flex items-center gap-6 z-[100] animate-fade-in">
+          <ShieldCheck size={24} />
+          <span className="text-[10px] font-black uppercase tracking-widest">{notification}</span>
+          <button onClick={() => setNotification(null)}><X size={20}/></button>
         </div>
       )}
     </div>

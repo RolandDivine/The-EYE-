@@ -202,7 +202,7 @@ const WalletGraph: React.FC<WalletGraphProps> = ({ data }) => {
                   x1={s.x} y1={s.y} x2={t.x} y2={t.y}
                   stroke={link.isProtected ? "url(#nqGrad)" : "rgba(255,255,255,0.05)"}
                   strokeWidth={isHighlighted ? (link.isProtected ? "3.5" : "2") : (link.isProtected ? "2.5" : "1")}
-                  marker-end={link.isProtected ? "url(#arrow-institutional)" : ""}
+                  markerEnd={link.isProtected ? "url(#arrow-institutional)" : ""}
                   className="transition-all duration-300"
                 />
                 

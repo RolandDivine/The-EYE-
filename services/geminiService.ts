@@ -2,7 +2,7 @@
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 
 // Use process.env for the platform, but fallback to import.meta.env for Vite/Vercel
-const apiKey = process.env.API_KEY || (import.meta.env && import.meta.env.VITE_GEMINI_API_KEY);
+const apiKey = (process.env as any).API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY;
 const ai = new GoogleGenAI({ apiKey: apiKey });
 
 export const getMEVAnalysis = async (userMode: string, tradingMode: 'SPOT' | 'FUTURES', context: any) => {
