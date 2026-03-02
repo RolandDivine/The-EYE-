@@ -91,7 +91,7 @@ const AlphaForge: React.FC<AlphaForgeProps> = ({ currentToken, onFactorGenerated
                 <button
                   onClick={handleForge}
                   disabled={isGenerating || !prompt.trim()}
-                  className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-900 text-black font-black rounded-2xl text-xs flex items-center gap-3 transition-all shadow-xl shadow-emerald-500/20 active:scale-95"
+                  className="btn-primary bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-900 text-black text-xs flex items-center gap-3 transition-all shadow-xl shadow-emerald-500/20"
                 >
                   {isGenerating ? (
                     <>
@@ -137,7 +137,7 @@ const AlphaForge: React.FC<AlphaForgeProps> = ({ currentToken, onFactorGenerated
                 setPrompt("Generate a high-probability win strategy for the current market regime focusing on Spot liquidity gaps.");
                 handleForge();
               }}
-              className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-2xl text-xs uppercase tracking-widest transition-all shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-3"
+              className="btn-primary bg-indigo-600 hover:bg-indigo-500 text-white text-xs uppercase tracking-widest flex items-center justify-center gap-3"
             >
               Generate Win Strategy <ArrowRight size={16} />
             </button>

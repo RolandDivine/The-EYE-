@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { Target, Layers, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Target, Layers, ArrowUpRight, ArrowDownRight, Info } from 'lucide-react';
 
 interface OrderFlow3DProps {
   price: number;
@@ -46,6 +46,7 @@ const OrderFlow3D: React.FC<OrderFlow3DProps> = ({ price, symbol }) => {
     const sceneRef = useRef<THREE.Scene | null>(null);
     const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
     const candlesRef = useRef<THREE.Group[]>([]);
+    const [showGlossary, setShowGlossary] = useState(false);
     
     // Data State
     const [lastPrice, setLastPrice] = useState(price);
@@ -200,32 +201,77 @@ const OrderFlow3D: React.FC<OrderFlow3DProps> = ({ price, symbol }) => {
             {/* Overlay UI */}
             <div className="absolute top-6 left-6 z-10 pointer-events-none">
                 <h3 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em] flex items-center gap-2 mb-2">
-                    <Target size={14}/> 3D Order Flow Map
+                    <Target size={14}/> 3D Mempool Profiler
                 </h3>
                 <div className="flex items-center gap-4">
                     <div>
-                        <span className="text-[8px] text-gray-500 uppercase block">Flow Delta</span>
+                        <span className="text-[8px] text-gray-500 uppercase block">Whale Flow</span>
                         <span className="text-white font-mono text-xs font-bold">{(currentVolume * 124).toFixed(0)} ETH</span>
                     </div>
                     <div>
-                        <span className="text-[8px] text-gray-500 uppercase block">Pattern</span>
-                        <span className="text-emerald-400 font-mono text-xs font-bold uppercase animate-pulse">Accumulation</span>
+                        <span className="text-[8px] text-gray-500 uppercase block">Mempool Bias</span>
+                        <span className="text-emerald-400 font-mono text-xs font-bold uppercase animate-pulse">Front-run Shield Active</span>
                     </div>
                 </div>
             </div>
 
-            <div className="absolute right-6 top-6 z-10 flex flex-col gap-2 pointer-events-none">
-                <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-lg border border-white/5">
+            <div className="absolute right-6 top-6 z-10 flex flex-col gap-2">
+                <button 
+                    onClick={() => setShowGlossary(!showGlossary)}
+                    className="flex items-center gap-2 bg-black/60 hover:bg-black/80 px-3 py-1.5 rounded-lg border border-white/10 transition-all pointer-events-auto"
+                >
+                     <Info size={12} className="text-blue-400"/>
+                     <span className="text-[9px] text-gray-300 font-black uppercase tracking-widest">Benefits</span>
+                </button>
+                <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-lg border border-white/5 pointer-events-none">
                      <Layers size={12} className="text-gray-500"/>
                      <span className="text-[9px] text-gray-300 mono">Depth: 100</span>
                 </div>
-                <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-lg border border-white/5">
+                <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-lg border border-white/5 pointer-events-none">
                      {lastPrice >= currentOpen ? <ArrowUpRight size={12} className="text-emerald-500"/> : <ArrowDownRight size={12} className="text-red-500"/>}
                      <span className={`text-[9px] mono font-black ${lastPrice >= currentOpen ? 'text-emerald-500' : 'text-red-500'}`}>
                         {lastPrice.toFixed(2)}
                      </span>
                 </div>
             </div>
+
+            {/* Benefits Modal/Overlay */}
+            {showGlossary && (
+                <div className="absolute inset-0 z-30 bg-black/90 backdrop-blur-md p-8 flex flex-col gap-6 overflow-y-auto">
+                    <div className="flex justify-between items-center">
+                        <h4 className="text-sm font-black text-white uppercase tracking-widest">Mempool Profiler Benefits</h4>
+                        <button onClick={() => setShowGlossary(false)} className="text-gray-500 hover:text-white">
+                            <ArrowDownRight className="rotate-45" size={20} />
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-1 gap-4">
+                        <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
+                            <span className="text-[10px] font-black text-blue-400 uppercase block mb-1">1. Front-run Detection</span>
+                            <p className="text-[11px] text-gray-400 leading-relaxed">
+                                Monitor pending transactions in the mempool to identify potential sandwich attacks or front-running attempts before they hit the chain.
+                            </p>
+                        </div>
+                        <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
+                            <span className="text-[10px] font-black text-emerald-400 uppercase block mb-1">2. Whale Tracking</span>
+                            <p className="text-[11px] text-gray-400 leading-relaxed">
+                                Visualize large buy/sell orders (Whales) entering the queue. Depth spikes often precede significant price movements.
+                            </p>
+                        </div>
+                        <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
+                            <span className="text-[10px] font-black text-orange-400 uppercase block mb-1">3. Liquidity Gaps</span>
+                            <p className="text-[11px] text-gray-400 leading-relaxed">
+                                Identify "thin" areas in the order book where price can slip rapidly. Use this to set better entry and exit points.
+                            </p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={() => setShowGlossary(false)}
+                        className="mt-auto w-full py-3 bg-blue-600 text-white font-black uppercase tracking-widest rounded-xl text-xs"
+                    >
+                        Got it, take me back
+                    </button>
+                </div>
+            )}
 
             {/* 3D Canvas Container */}
             <div ref={containerRef} className="w-full h-full" />

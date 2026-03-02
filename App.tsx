@@ -420,7 +420,7 @@ const App: React.FC = () => {
         <div className="flex lg:flex-col gap-2 w-auto lg:w-full px-2 lg:px-4">
            {[
              { id: ViewState.MARKET_SURFACE, icon: <Grid size={20}/>, label: t.nav_surface },
-             { id: ViewState.TECHNICAL, icon: <Layers size={20}/>, label: t.nav_quant },
+             { id: ViewState.TECHNICAL, icon: <Layers size={20}/>, label: "3D Mempool Profiler" },
              { id: ViewState.GRAPH, icon: <Network size={20}/>, label: t.nav_topology },
              { id: ViewState.ALPHA_FORGE, icon: <BrainCircuit size={20}/>, label: t.nav_forge }
            ].map(view => (
@@ -670,7 +670,7 @@ const App: React.FC = () => {
                               )}
                             </td>
                             <td className="p-5 text-right">
-                              <button className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all">
+                              <button className="btn-xs btn-outline rounded-lg font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all">
                                 Inspect
                               </button>
                             </td>
@@ -694,12 +694,17 @@ const App: React.FC = () => {
                               <div className="text-[10px] text-gray-500 font-bold uppercase">{token.sector || 'DEFI'}</div>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <div className="font-black text-white text-sm">${formatPrice(token.priceUsd)}</div>
-                            <div className={`text-[10px] font-black flex items-center justify-end gap-1 ${(token.priceChange24h || 0) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                              {(token.priceChange24h || 0) >= 0 ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
-                              {(token.priceChange24h || 0).toFixed(2)}%
+                          <div className="flex flex-col items-end gap-2">
+                            <div className="text-right">
+                              <div className="font-black text-white text-sm">${formatPrice(token.priceUsd)}</div>
+                              <div className={`text-[10px] font-black flex items-center justify-end gap-1 ${(token.priceChange24h || 0) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                {(token.priceChange24h || 0) >= 0 ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
+                                {(token.priceChange24h || 0).toFixed(2)}%
+                              </div>
                             </div>
+                            <button className="btn-xs btn-outline rounded-lg font-black uppercase tracking-widest">
+                              Inspect
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -927,7 +932,7 @@ const App: React.FC = () => {
                    <div className="flex p-1 bg-black/40 border border-white/5 rounded-xl w-fit">
                       <button 
                         onClick={() => setRetailTradingMode('SPOT')}
-                        className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${retailTradingMode === 'SPOT' ? 'bg-red-500 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}
+                        className={`btn-xs rounded-xl font-black uppercase tracking-widest transition-all flex items-center gap-2 ${retailTradingMode === 'SPOT' ? 'bg-red-500 text-white shadow-lg shadow-red-500/20' : 'text-gray-500 hover:text-white'}`}
                       >
                          <Coins size={12} /> Spot
                       </button>
@@ -935,7 +940,7 @@ const App: React.FC = () => {
                         onClick={() => setRetailTradingMode('FUTURES')}
                         disabled={currentToken?.isContract}
                         title={currentToken?.isContract ? "Futures unavailable for custom contracts" : "High Leverage"}
-                        className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${retailTradingMode === 'FUTURES' ? 'bg-red-500 text-white shadow-lg' : 'text-gray-500 hover:text-white'} ${currentToken?.isContract ? 'opacity-30 cursor-not-allowed' : ''}`}
+                        className={`btn-xs rounded-xl font-black uppercase tracking-widest transition-all flex items-center gap-2 ${retailTradingMode === 'FUTURES' ? 'bg-red-500 text-white shadow-lg shadow-red-500/20' : 'text-gray-500 hover:text-white'} ${currentToken?.isContract ? 'opacity-30 cursor-not-allowed' : ''}`}
                       >
                          <CandlestickChart size={12} /> Futures
                       </button>
@@ -967,7 +972,7 @@ const App: React.FC = () => {
 
                     <button 
                       onClick={() => setIsExecutionModalOpen(true)}
-                      className="w-full py-6 bg-white text-black font-black uppercase tracking-[0.4em] text-[11px] rounded-[28px] hover:bg-gray-200 transition-all flex items-center justify-center gap-3 active:scale-95 shadow-2xl mt-auto"
+                      className="btn-primary w-full py-6 text-[11px] uppercase tracking-[0.4em] flex items-center justify-center gap-3 mt-auto"
                     >
                       <ShoppingCart size={18} /> {t.execute_button}
                     </button>
@@ -983,7 +988,7 @@ const App: React.FC = () => {
                  <button 
                   onClick={runAnalysis}
                   disabled={!currentToken || isAnalyzing}
-                  className={`w-full py-7 font-black uppercase tracking-[0.5em] text-[12px] rounded-[36px] transition-all duration-500 shadow-2xl mt-auto active:scale-95 z-10 ${userMode === UserMode.INSTITUTIONAL ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-red-600 text-white hover:bg-red-700'}`}
+                  className={`btn-primary w-full py-7 text-[12px] uppercase tracking-[0.5em] ${userMode === UserMode.INSTITUTIONAL ? 'bg-blue-600' : 'bg-red-600 hover:bg-red-700'}`}
                  >
                    {currentToken ? t.run_directive : t.scanning}
                  </button>
