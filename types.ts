@@ -4,7 +4,8 @@ export enum ViewState {
   GRAPH = 'GRAPH',
   TECHNICAL = 'TECHNICAL',
   MARKET_SURFACE = 'MARKET_SURFACE',
-  ALPHA_FORGE = 'ALPHA_FORGE'
+  ALPHA_FORGE = 'ALPHA_FORGE',
+  LANDING = 'LANDING'
 }
 
 export enum MarketRegime {
@@ -73,4 +74,18 @@ export interface TokenData {
   dominance?: number;
   mktMakerActivity?: 'HIGH' | 'MEDIUM' | 'LOW';
   isContract?: boolean; // True if loaded via raw contract address
+}
+
+export interface NewsItem {
+  id: string;
+  title: string;
+  content: string;
+  source: string;
+  time: string;
+  url: string;
+  sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  practicalInsight: {
+    institutional: string;
+    retail: string;
+  };
 }

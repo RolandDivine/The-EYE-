@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Rocket, Zap, Shield, BrainCircuit, Loader2, ChevronRight, Sparkles, Target, BarChart3, TrendingUp, AlertCircle } from 'lucide-react';
+import { Rocket, Zap, Shield, BrainCircuit, Loader2, ChevronRight, Sparkles, Target, BarChart3, TrendingUp, AlertCircle, ArrowRight } from 'lucide-react';
 import { AlphaFactor, MarketRegime } from '../types';
 import { generateAlphaFactor } from '../services/geminiService';
 import { AreaChart, Area, ResponsiveContainer, YAxis, XAxis, CartesianGrid, Tooltip } from 'recharts';
@@ -67,44 +67,80 @@ const AlphaForge: React.FC<AlphaForgeProps> = ({ currentToken, onFactorGenerated
       </div>
 
       <div className="flex-1 overflow-y-auto p-8 space-y-8 scrollbar-hide">
-        <div className="relative group">
-          <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500/20 to-blue-500/20 rounded-[32px] blur opacity-25 group-focus-within:opacity-100 transition duration-1000"></div>
-          <div className="relative bg-[#0a0a0a] border border-white/5 rounded-[28px] p-6 shadow-2xl">
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe your quantitative thesis... (e.g. 'Identify mean reversion opportunities when RSI < 30 and volume is 2.5x the 20-day moving average')"
-              className="w-full h-32 bg-transparent border-none outline-none text-lg text-white placeholder:text-zinc-800 font-medium resize-none"
-            />
-            <div className="flex justify-between items-center mt-4 pt-4 border-t border-white/5">
-              <div className="flex gap-4">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-xl border border-white/10">
-                  <Zap size={12} className="text-orange-500" />
-                  <span className="text-[9px] font-black text-zinc-500 uppercase">Low Latency</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="relative group">
+            <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500/20 to-blue-500/20 rounded-[32px] blur opacity-25 group-focus-within:opacity-100 transition duration-1000"></div>
+            <div className="relative bg-[#0a0a0a] border border-white/5 rounded-[28px] p-6 shadow-2xl">
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Describe your quantitative thesis... (e.g. 'Identify mean reversion opportunities when RSI < 30 and volume is 2.5x the 20-day moving average')"
+                className="w-full h-32 bg-transparent border-none outline-none text-lg text-white placeholder:text-zinc-800 font-medium resize-none"
+              />
+              <div className="flex justify-between items-center mt-4 pt-4 border-t border-white/5">
+                <div className="flex gap-4">
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-xl border border-white/10">
+                    <Zap size={12} className="text-orange-500" />
+                    <span className="text-[9px] font-black text-zinc-500 uppercase">Low Latency</span>
+                  </div>
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-xl border border-white/10">
+                    <Shield size={12} className="text-blue-500" />
+                    <span className="text-[9px] font-black text-zinc-500 uppercase">Risk Guardrails</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-xl border border-white/10">
-                  <Shield size={12} className="text-blue-500" />
-                  <span className="text-[9px] font-black text-zinc-500 uppercase">Risk Guardrails</span>
+                <button
+                  onClick={handleForge}
+                  disabled={isGenerating || !prompt.trim()}
+                  className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-900 text-black font-black rounded-2xl text-xs flex items-center gap-3 transition-all shadow-xl shadow-emerald-500/20 active:scale-95"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      SYNTHESIZING...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      FORGE ALPHA
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-indigo-600/10 to-transparent border border-indigo-500/20 rounded-[32px] p-8 flex flex-col justify-between relative overflow-hidden group">
+            <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-indigo-500/10 blur-[80px] rounded-full pointer-events-none" />
+            <div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-indigo-600 rounded-xl text-white shadow-lg">
+                  <Rocket size={20} />
+                </div>
+                <h3 className="text-lg font-black uppercase tracking-widest text-indigo-400">Direct Alpha Engine</h3>
+              </div>
+              <p className="text-sm text-zinc-400 font-medium leading-relaxed mb-6">
+                Don't have a thesis? Let the engine scan for <span className="text-white font-bold">High-Probability Wins</span> in the current Spot/Futures regime.
+              </p>
+              <div className="grid grid-cols-2 gap-4 mb-8">
+                <div className="p-4 bg-black/40 border border-white/5 rounded-2xl">
+                  <div className="text-[8px] font-black text-zinc-600 uppercase mb-1">Win Probability</div>
+                  <div className="text-xl font-black text-emerald-500">82.4%</div>
+                </div>
+                <div className="p-4 bg-black/40 border border-white/5 rounded-2xl">
+                  <div className="text-[8px] font-black text-zinc-600 uppercase mb-1">Expected ROI</div>
+                  <div className="text-xl font-black text-blue-500">+12.5%</div>
                 </div>
               </div>
-              <button
-                onClick={handleForge}
-                disabled={isGenerating || !prompt.trim()}
-                className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-900 text-black font-black rounded-2xl text-xs flex items-center gap-3 transition-all shadow-xl shadow-emerald-500/20 active:scale-95"
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    SYNTHESIZING...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" />
-                    FORGE ALPHA
-                  </>
-                )}
-              </button>
             </div>
+            <button 
+              onClick={() => {
+                setPrompt("Generate a high-probability win strategy for the current market regime focusing on Spot liquidity gaps.");
+                handleForge();
+              }}
+              className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-2xl text-xs uppercase tracking-widest transition-all shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-3"
+            >
+              Generate Win Strategy <ArrowRight size={16} />
+            </button>
           </div>
         </div>
 

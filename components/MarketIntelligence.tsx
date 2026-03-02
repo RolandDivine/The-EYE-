@@ -23,7 +23,7 @@ const MarketIntelligence: React.FC<MarketIntelligenceProps> = ({ temperature, re
   };
 
   return (
-    <div className="bg-[#0a0a0a] border border-white/5 rounded-[40px] p-8 shadow-2xl flex flex-col gap-6">
+    <div className="bg-[#0a0a0a] border border-white/5 rounded-[32px] lg:rounded-[40px] p-6 lg:p-8 shadow-2xl flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-xl ${getTempBg(temperature)} ${getTempColor(temperature)}`}>
@@ -90,6 +90,28 @@ const MarketIntelligence: React.FC<MarketIntelligenceProps> = ({ temperature, re
             <p className="text-xs font-black text-white uppercase tracking-tight">{regime.replace('_', ' ')}</p>
           </div>
           <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
+        </div>
+
+        {/* Glossary / Benefits Section */}
+        <div className="mt-4 p-4 bg-blue-500/5 border border-blue-500/10 rounded-2xl space-y-3">
+          <div className="flex items-center gap-2">
+            <Info size={12} className="text-blue-400" />
+            <span className="text-[9px] font-black uppercase tracking-widest text-blue-400">Intelligence Glossary</span>
+          </div>
+          <div className="space-y-2">
+            <div>
+              <span className="text-[8px] font-black text-white uppercase block">λ (Kyle's Lambda)</span>
+              <p className="text-[8px] text-zinc-500 font-medium leading-tight">Measures how much the price moves per $1M of volume. High λ = Low Liquidity.</p>
+            </div>
+            <div>
+              <span className="text-[8px] font-black text-white uppercase block">Active Regime</span>
+              <p className="text-[8px] text-zinc-500 font-medium leading-tight">The current market "mood" (e.g., Trending vs. Ranging). Tells you which strategies work best.</p>
+            </div>
+            <div>
+              <span className="text-[8px] font-black text-white uppercase block">COWs (Coincidence of Wants)</span>
+              <p className="text-[8px] text-zinc-500 font-medium leading-tight">MEV-protected trade matching. Saves you money by avoiding sandwich attacks.</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

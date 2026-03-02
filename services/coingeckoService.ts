@@ -8,12 +8,89 @@ export interface EnhancedTokenData extends TokenData {
   pairAddress?: string;
 }
 
-const SECTORS = ['Layer 1', 'Layer 2', 'DeFi', 'AI', 'Meme', 'RWA', 'GameFi'];
+const SECTOR_MAP: Record<string, string> = {
+  'BTC': 'Store of Value',
+  'ETH': 'Smart Contract Platform',
+  'SOL': 'Smart Contract Platform',
+  'BNB': 'Exchange Token',
+  'XRP': 'Payment / Settlement',
+  'ADA': 'Smart Contract Platform',
+  'AVAX': 'Smart Contract Platform',
+  'DOGE': 'Meme',
+  'DOT': 'Interoperability',
+  'LINK': 'Oracle',
+  'MATIC': 'Layer 2',
+  'NEAR': 'Smart Contract Platform',
+  'LTC': 'Payment',
+  'SHIB': 'Meme',
+  'BCH': 'Payment',
+  'UNI': 'DeFi / DEX',
+  'ATOM': 'Interoperability',
+  'ICP': 'Cloud Computing',
+  'PEPE': 'Meme',
+  'FET': 'AI',
+  'STX': 'Bitcoin Layer 2',
+  'IMX': 'GameFi / Layer 2',
+  'KAS': 'Layer 1',
+  'OP': 'Layer 2',
+  'ARB': 'Layer 2',
+  'RNDR': 'AI / Rendering',
+  'TAO': 'AI',
+  'INJ': 'DeFi / Layer 1',
+  'TIA': 'Modular Blockchain',
+  'SUI': 'Smart Contract Platform',
+  'APT': 'Smart Contract Platform',
+  'SEI': 'Smart Contract Platform',
+  'FIL': 'Storage',
+  'LDO': 'Liquid Staking',
+  'MKR': 'DeFi / Stablecoin',
+  'AAVE': 'DeFi / Lending',
+  'SNX': 'DeFi / Derivatives',
+  'GRT': 'Indexing',
+  'THETA': 'Video / CDN',
+  'VET': 'Supply Chain',
+  'EGLD': 'Smart Contract Platform',
+  'PYTH': 'Oracle',
+  'JUP': 'DeFi / DEX',
+  'PENDLE': 'DeFi / Yield',
+  'ENA': 'DeFi / Stablecoin',
+  'W': 'Interoperability',
+  'ONDO': 'RWA',
+  'MNT': 'Layer 2',
+  'STRK': 'Layer 2',
+  'BEAM': 'GameFi',
+  'GALA': 'GameFi',
+  'SAND': 'Metaverse',
+  'MANA': 'Metaverse',
+  'AXS': 'GameFi',
+  'WIF': 'Meme',
+  'BONK': 'Meme',
+  'FLOKI': 'Meme',
+  'POPCAT': 'Meme',
+  'BRETT': 'Meme',
+  'MOG': 'Meme',
+  'TURBO': 'Meme',
+  'GOAT': 'AI Meme',
+  'ACT': 'AI Meme',
+  'PNUT': 'Meme',
+  'FARTCOIN': 'Meme',
+};
 
-/**
- * Enhanced Meta-Search: Integrates DexScreener, CoinGecko, and cross-chain discovery
- * Supports Solana, Ethereum, Base, BSC, and more.
- */
+const getSector = (symbol: string, name: string): string => {
+  const upperSymbol = symbol.toUpperCase();
+  if (SECTOR_MAP[upperSymbol]) return SECTOR_MAP[upperSymbol];
+  
+  const lowerName = name.toLowerCase();
+  if (lowerName.includes('meme') || lowerName.includes('inu') || lowerName.includes('pepe') || lowerName.includes('dog')) return 'Meme';
+  if (lowerName.includes('swap') || lowerName.includes('finance') || lowerName.includes('dex') || lowerName.includes('yield')) return 'DeFi';
+  if (lowerName.includes('ai') || lowerName.includes('gpt') || lowerName.includes('neural')) return 'AI';
+  if (lowerName.includes('game') || lowerName.includes('play') || lowerName.includes('metaverse')) return 'GameFi';
+  if (lowerName.includes('layer 2') || lowerName.includes('rollup') || lowerName.includes('zk')) return 'Layer 2';
+  if (lowerName.includes('oracle') || lowerName.includes('data')) return 'Oracle';
+  
+  return 'Ecosystem';
+};
+
 export const fetchTokenByAddress = async (address: string): Promise<EnhancedTokenData | null> => {
   const cleanAddress = address.trim();
   
@@ -36,7 +113,7 @@ export const fetchTokenByAddress = async (address: string): Promise<EnhancedToke
           volume24h: bestPair.volume?.h24 || 0,
           image: bestPair.info?.imageUrl || `https://ui-avatars.com/api/?name=${bestPair.baseToken.symbol}&background=random`,
           isSimulated: false,
-          sector: SECTORS[Math.floor(Math.random() * SECTORS.length)],
+          sector: getSector(bestPair.baseToken.symbol, bestPair.baseToken.name),
           volatility: 0.4 + Math.random() * 0.6,
           dominance: 0.01,
           mktMakerActivity: Math.random() > 0.4 ? 'HIGH' : 'MEDIUM',
@@ -73,7 +150,7 @@ export const fetchTokenByAddress = async (address: string): Promise<EnhancedToke
           volume24h: data.market_data.total_volume.usd || 0,
           image: data.image.large,
           isSimulated: false,
-          sector: data.categories?.[0] || SECTORS[Math.floor(Math.random() * SECTORS.length)],
+          sector: data.categories?.[0] || getSector(data.symbol, data.name),
           volatility: 0.2 + Math.random() * 0.8,
           dominance: Math.random() * 5,
           mktMakerActivity: Math.random() > 0.5 ? 'HIGH' : 'MEDIUM',
@@ -125,7 +202,7 @@ export const fetchTopMarkets = async (page: number = 1, retries: number = 2): Pr
           volume24h: item.total_volume || 0,
           image: item.image,
           rank: item.market_cap_rank,
-          sector: SECTORS[Math.floor(Math.random() * SECTORS.length)],
+          sector: getSector(item.symbol, item.name),
           volatility: 0.1 + Math.random() * 0.9,
           dominance: (item.market_cap / 1e12) * 100,
           mktMakerActivity: Math.random() > 0.3 ? 'HIGH' : 'LOW',
@@ -175,7 +252,7 @@ export const fetchTopMarkets = async (page: number = 1, retries: number = 2): Pr
     marketCap: (20 - i) * 5e10,
     volume24h: (20 - i) * 1e9,
     rank: i + 1,
-    sector: SECTORS[i % SECTORS.length],
+    sector: getSector(token.symbol, token.name),
     volatility: 0.2 + Math.random() * 0.6,
     dominance: (20 - i) * 0.5,
     mktMakerActivity: Math.random() > 0.4 ? 'HIGH' : 'MEDIUM',
